@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.ruff_cache
+
+# Config
+config.json
+
+# Virtual environments
+.venv
+
+# Direnv
+.direnv
+.envrc
+
+# Flake
+flake.nix
+flake.lock
+shell.nix
