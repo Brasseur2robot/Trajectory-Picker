@@ -7,10 +7,16 @@ wheels/
 *.egg-info
 .ruff_cache
 
+# Assets
+assets/*
+!assets/playmat_2025_FINAL.png
+!assets/playmat_2025_FINAL.svg
+!assets/laymat_2025_FINAL_3000x2000.png
+
 # Config
 config.json
 
-# Virtual environments
+# Virtual environment
 .venv
 
 # Direnv

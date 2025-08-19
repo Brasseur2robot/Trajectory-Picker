@@ -8,6 +8,7 @@ import numpy as np  # Affine transformation matrix operations
 import os  # Directory operations
 import json  # Json operations
 from trajectory_manager import *
+import trajectory_manager
 
 
 class GUI(tk.Frame):
@@ -85,7 +86,10 @@ class GUI(tk.Frame):
             label="Open image", command=self.load_image, accelerator="Ctrl + O"
         )
         self.file_menu.add_command(
-            label="Open trajectory", command=self.load_trajectory
+            label="Open trajectory", command=self.load_file, accelerator="Ctrl + T"
+        )
+        self.file_menu.add_command(
+            label="Save trajectory", command=self.save_file, accelerator="Ctrl + S"
         )
         self.file_menu.add_separator()  # Add separator
         self.file_menu.add_command(
@@ -94,7 +98,13 @@ class GUI(tk.Frame):
 
         self.menu_bar.bind_all(
             "<Control-o>", self.load_image
-        )  # Create a bind to open file
+        )  # Create a bind to open an image to load
+        self.menu_bar.bind_all(
+            "<Control-t>", self.load_file
+        )  # Create a bind to open a trajectory file
+        self.menu_bar.bind_all(
+            "<Control-s>", self.save_file
+        )  # Create a bind to save the current trajectory to a file
         self.menu_bar.bind_all(
             "<Control-q>", self.menu_quit_clicked
         )  # Create a bind to close the app
@@ -320,7 +330,7 @@ class GUI(tk.Frame):
             fg="#ffffff",
             bd=0,
             highlightthickness=0,
-            height=10,
+            height=14,
             width=40,
         )
         self.floating_panel_text_widget.pack(padx=10, pady=10)
@@ -331,7 +341,7 @@ class GUI(tk.Frame):
         # Create a list of Checkbox var to update points
         self.checkbox_var_widgets = []
 
-        # Export button
+        # Export & delete buttons
         tk.Button(
             self.floating_panel_content,
             text="Delete point(s)",
@@ -343,7 +353,8 @@ class GUI(tk.Frame):
             relief=tk.FLAT,
             overrelief=tk.FLAT,
         ).pack(padx=10, pady=10)
-        tk.Button(
+        # Old config:
+        """tk.Button(
             self.floating_panel_content,
             text="Export to json or csv",
             command=self.save_file,
@@ -353,7 +364,7 @@ class GUI(tk.Frame):
             activeforeground="white",
             relief=tk.FLAT,
             overrelief=tk.FLAT,
-        ).pack(padx=10, pady=10)
+        ).pack(padx=10, pady=10)"""
 
         # Enable dragging the panel
         # TODO: Need to be tested on Windows to see if it's working without
@@ -388,7 +399,7 @@ class GUI(tk.Frame):
     # Save & load file / Config wrapper
     # -------------------------------------------------------------------------------
 
-    def save_file(self):
+    def save_file(self, event=None):
         # Open a file picker to save coordinates to a file
         if not self.image_points:
             messagebox.showwarning("No Data", "There are no coordinates to save.")
@@ -411,6 +422,33 @@ class GUI(tk.Frame):
                     messagebox.showerror("Unsupported File", "File type not supported.")
             except Exception as e:
                 messagebox.showerror("Error", f"Error saving file: {e}")
+
+    def load_file(self, event=None):
+        # Load the trajectory file chosen by the user
+        file_path = filedialog.askopenfilename(
+            filetypes=[
+                ("JSON & CSV", ".json .csv"),
+                ("JSON", ".json"),
+                ("CSV", ".csv"),
+            ],
+            initialdir=os.getcwd(),  # Current directory
+        )
+
+        if file_path:
+            file_extension = os.path.splitext(file_path)[-1].lower()
+            try:
+                if file_extension == ".json":
+                    self.image_points = json_to_coordinates(file_path)
+                    self.update_fp()
+                    self.redraw_image()
+                elif file_extension == ".csv":
+                    self.image_points = csv_to_coordinates(file_path)
+                    self.update_fp()
+                    self.redraw_image()
+                else:
+                    messagebox.showerror("Unsupported File", "File type not supported.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Error loading file: {e}")
 
     def save_config(self, key, value):
         # Save the config inside .json file based on a key / value system
@@ -445,7 +483,7 @@ class GUI(tk.Frame):
             self.set_image(last_image)
 
     def load_image(self, event=None):
-        # Load the image choosed by the user
+        # Load the image chosen by the user
         file_path = filedialog.askopenfilename(
             filetypes=[
                 ("Image file", ".bmp .png .jpg .tif"),
@@ -462,9 +500,6 @@ class GUI(tk.Frame):
 
         if file_path:
             self.save_config("last_opened_image", file_path)
-
-    def load_trajectory(self):
-        print("hello")
 
     def coordinate_system_wrapper(self):
         # Wrapper to save the coordinate_system in the CONFIG_FILE and redraw_image
@@ -491,12 +526,12 @@ class GUI(tk.Frame):
                 points_to_pop
             ):  # Reverse it to not delete the wrong ones
                 self.image_points.pop(index)
-                self.update_fp_point()  # Update the content of the floating panel
+                self.update_fp()  # Update the content of the floating panel
                 self.redraw_image()  # Update the canvas
         else:
             if self.image_points:
                 self.image_points.pop()  # Remove the last point
-                self.update_fp_point()  # Update the content of the floating panel
+                self.update_fp()  # Update the content of the floating panel
                 self.redraw_image()  # Update the canvas
 
     def create_point(self, event):
@@ -506,7 +541,7 @@ class GUI(tk.Frame):
         image_point = self.to_image_point(event.x, event.y)
         if image_point is not None:
             self.image_points.append((image_point[0], image_point[1]))
-            self.update_fp_point()  # Update the content of the floating panel
+            self.update_fp()  # Update the content of the floating panel
             self.redraw_image()
             calculate_angle(self.image_points)
 
@@ -526,7 +561,7 @@ class GUI(tk.Frame):
         image_point = self.to_image_point(event.x, event.y)
         if image_point is not None:
             self.label_image_pixel["text"] = (
-                f"({image_point[0]:.2f}, {image_point[1]:.2f})"
+                f"({image_point[0]:.0f}, {image_point[1]:.0f})"
             )
         else:
             self.label_image_pixel["text"] = "(--, --)"
@@ -648,7 +683,7 @@ class GUI(tk.Frame):
     # Data floating panel management -> Point data
     # -------------------------------------------------------------------------------
 
-    def update_fp_point(self):
+    def update_fp(self):
         # Update the floating panel text widget with the current list of coordinates
         # Clear current content
         self.checkbox_var_widgets.clear()
@@ -656,7 +691,7 @@ class GUI(tk.Frame):
         self.floating_panel_text_widget.delete(1.0, tk.END)
 
         # Insert updated coordinates
-        for i, (x, y) in enumerate(np_float_to_int(self.image_points)):
+        for i, (x, y) in enumerate(self.image_points):
             self.floating_panel_text_widget.insert(tk.END, f"Point {i + 1} - x: ")
 
             # Create Entry widgets for x and y values
@@ -667,7 +702,9 @@ class GUI(tk.Frame):
                 fg="white",
                 relief=tk.FLAT,
             )
-            x_entry.insert(0, str(x))  # Set the initial value to the current x
+            x_entry.insert(
+                0, format(x, ".0f")
+            )  # Set the initial value to the current x rounded
             x_entry.bind(
                 "<FocusOut>",
                 lambda event, idx=i: self.wrapper_update_coordinate(event, idx),
@@ -681,7 +718,9 @@ class GUI(tk.Frame):
                 fg="white",
                 relief=tk.FLAT,
             )
-            y_entry.insert(0, str(y))  # Set the initial value to the current y
+            y_entry.insert(
+                0, format(y, ".0f")
+            )  # Set the initial value to the current y rounded
             y_entry.bind(
                 "<FocusOut>",
                 lambda event, idx=i: self.wrapper_update_coordinate(event, idx),

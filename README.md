@@ -2,14 +2,14 @@
 
 [![Project License](https://img.shields.io/badge/license-%20%20GNU%20GPLv3%20-green?style=plastic)](LICENSE)
 
-A tkinter application that renders a chosen image and can be used to draw trajectory hovers. Created for the purpose of the Robotic French Cup (you will find the playmat in the [assets](https://github.com/Brasseur2robot/Trajectory-Picker/tree/main/assets) folder). This project is based on this work: [PythonImageViewer](https://github.com/ImagingSolution/PythonImageViewer)
+A tkinter application that renders a chosen image and can be used to draw trajectory overs. Created for the purpose of the Robotic French Cup (you will find the playmat in the [assets](https://github.com/Brasseur2robot/Trajectory-Picker/tree/main/assets) folder). This project is based on this work: [PythonImageViewer](https://github.com/ImagingSolution/PythonImageViewer)
 
 ## Features
 
-- Export trajectory to .json or .csv
+- Create custom trajectory over an image
+- Import & export trajectory to .json or .csv
 - 2 coordinates system
 - Render .jpg, .png, .bmp and .tif image
-- Export trajectory (soon)
 
 ## Requirements
 
