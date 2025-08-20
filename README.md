@@ -2,7 +2,7 @@
 
 [![Project License](https://img.shields.io/badge/license-%20%20GNU%20GPLv3%20-green?style=plastic)](LICENSE)
 
-A tkinter application that renders a chosen image and can be used to draw trajectory overs. Created for the purpose of the Robotic French Cup (you will find the playmat in the [assets](https://github.com/Brasseur2robot/Trajectory-Picker/tree/main/assets) folder). This project is based on this work: [PythonImageViewer](https://github.com/ImagingSolution/PythonImageViewer)
+A tkinter application that renders a chosen image and can be used to draw trajectory overs. Created for the purpose of the Robotic French Cup (you will find the playmat in the [assets](https://github.com/Brasseur2robot/Trajectory-Picker/tree/main/assets) folder). This project is based on this work: [PythonImageViewer](https://github.com/ImagingSolution/PythonImageViewer) from [ImagingSolution](https://github.com/ImagingSolution)
 
 ## Features
 
@@ -25,7 +25,7 @@ A tkinter application that renders a chosen image and can be used to draw trajec
 
 ```bash
 https://github.com/Brasseur2robot/Trajectory-Picker.git
-cd project-name
+cd Trajectory-Picker
 ```
 
 ### 2. Start Trajectory Picker
@@ -36,4 +36,4 @@ uv run main.py
 
 uv will manage all the libraries/dependencies for you!
 
-### 3. Enjoy Trajectory Picker
+### 3. Enjoy Trajectory Picker :)

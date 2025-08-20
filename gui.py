@@ -31,6 +31,7 @@ class GUI(tk.Frame):
             self.coordinate_system = tk.StringVar(value=coordinate_system)
         else:
             self.coordinate_system = tk.StringVar(value="top-left")
+        self.previous_cs = self.coordinate_system.get()
 
         # Basic window setting
         self.master.geometry("600x400")
@@ -159,9 +160,8 @@ class GUI(tk.Frame):
             command=lambda: self.rotate_image(-5),
             accelerator="Ctrl + L",
         )
-
-        # Option & help menu
-        self.options_menu = tk.Menu(
+        # Trajectory menu
+        self.trajectory_menu = tk.Menu(
             self.menu_bar,
             tearoff=tk.OFF,
             bg="#1d1d1d",
@@ -170,11 +170,11 @@ class GUI(tk.Frame):
             relief=tk.FLAT,
             bd=0,
         )
-        self.menu_bar.add_cascade(label="Options & help", menu=self.options_menu)
+        self.menu_bar.add_cascade(label="Trajectory", menu=self.trajectory_menu)
 
         # Coordinate system sub-menu
         self.cs_sub_menu = tk.Menu(
-            self.options_menu,
+            self.trajectory_menu,
             tearoff=tk.OFF,
             bg="#1d1d1d",
             fg="#ffffff",
@@ -182,7 +182,9 @@ class GUI(tk.Frame):
             relief=tk.FLAT,
             bd=0,
         )
-        self.options_menu.add_cascade(label="Coordinate system", menu=self.cs_sub_menu)
+        self.trajectory_menu.add_cascade(
+            label="Coordinate system", menu=self.cs_sub_menu
+        )  # cs means coordinate system here
 
         self.cs_sub_menu.add_radiobutton(
             label="Top left",
@@ -196,6 +198,30 @@ class GUI(tk.Frame):
             value="bottom-left",
             command=lambda: self.coordinate_system_wrapper(),
         )
+
+        self.trajectory_menu.add_command(
+            label="Add a new point",
+            command=lambda: self.create_point(event="Menu"),
+            accelerator="Left click",
+        )
+
+        self.trajectory_menu.add_command(
+            label="Delete last point",
+            command=lambda: self.delete_point(event=not None),
+            accelerator="Middle click",
+        )
+
+        # TODO: Option & help menu
+        """self.options_menu = tk.Menu(
+            self.menu_bar,
+            tearoff=tk.OFF,
+            bg="#1d1d1d",
+            fg="#ffffff",
+            activebackground="#eeb604",
+            relief=tk.FLAT,
+            bd=0,
+        )
+        self.menu_bar.add_cascade(label="Options & help", menu=self.options_menu)"""
 
         self.master.config(menu=self.menu_bar)  # Menu bar arrangement
 
@@ -232,8 +258,8 @@ class GUI(tk.Frame):
         )  # Same as Dock.Fill in both of these
 
         # Canvas / Menu separator
-        self.separator_csb = tk.Frame(self.canvas, bg="#EEB604", height="2")
-        self.separator_csb.pack(side="top", fill="x")
+        self.separator_cm = tk.Frame(self.canvas, bg="#EEB604", height="2")
+        self.separator_cm.pack(side="top", fill="x")
 
         # Canvas / Status bar separator
         self.separator_csb = tk.Frame(self.canvas, bg="#EEB604", height="2")
@@ -288,7 +314,7 @@ class GUI(tk.Frame):
         self.floating_panel = tk.Toplevel(self.master)
         self.floating_panel.minsize(width=self.floating_panel_width, height=300)
         self.floating_panel.overrideredirect(True)  # Remove window decorations
-        self.floating_panel.geometry("300x300+100+100")
+        self.floating_panel.geometry("100x300+100+100")
         self.floating_panel.configure(bg="#262626")
 
         # Create a title bar
@@ -324,13 +350,19 @@ class GUI(tk.Frame):
         self.floating_panel_content = tk.Frame(self.floating_panel, bg="#262626")
         self.floating_panel_content.pack(expand=True, fill=tk.BOTH)
 
+        # Titlebar / Panel content separator
+        self.separator_cpc = tk.Frame(
+            self.floating_panel_content, bg="#EEB604", height="2"
+        )
+        self.separator_cpc.pack(side="top", fill="x")
+
         self.floating_panel_text_widget = tk.Text(
             self.floating_panel_content,
             bg="#262626",
             fg="#ffffff",
             bd=0,
             highlightthickness=0,
-            height=14,
+            height=13,
             width=40,
         )
         self.floating_panel_text_widget.pack(padx=10, pady=10)
@@ -503,8 +535,23 @@ class GUI(tk.Frame):
 
     def coordinate_system_wrapper(self):
         # Wrapper to save the coordinate_system in the CONFIG_FILE and redraw_image
-        self.save_config("coordinate_system", self.coordinate_system.get())
-        self.redraw_image()
+        response = "yes"
+        if self.previous_cs == self.coordinate_system.get():
+            return
+        if self.image_points:
+            response = messagebox.askquestion(
+                "Coordinate system",
+                "You already have points in your trajectory set with a specific coordinate system. Setting another one can broke your trajectory. Do you want to continue ?",
+            )
+
+        if response == "yes":
+            self.previous_cs = self.coordinate_system.get()
+            self.save_config("coordinate_system", self.coordinate_system.get())
+            self.redraw_image()
+            print(self.previous_cs)
+            print(type(self.coordinate_system.get()))
+        elif self.previous_cs != self.coordinate_system.get():
+            self.coordinate_system.set(self.previous_cs)
 
     # -------------------------------------------------------------------------------
     # Define mouse & keyboard event
@@ -515,7 +562,7 @@ class GUI(tk.Frame):
         self.__old_event = event
 
     def delete_point(self, event=None):
-        # Double-click right mouse button / delete latest point
+        # Middle right mouse button pressed / delete latest point
         if event == None:
             points_to_pop = [
                 i
@@ -538,12 +585,18 @@ class GUI(tk.Frame):
         # Left mouse button pressed / create a point
         if self.pil_image is None:
             return
-        image_point = self.to_image_point(event.x, event.y)
-        if image_point is not None:
-            self.image_points.append((image_point[0], image_point[1]))
-            self.update_fp()  # Update the content of the floating panel
-            self.redraw_image()
-            calculate_angle(self.image_points)
+        if event == "Menu":
+            return
+            # TODO:
+        else:
+            image_point = self.to_image_point(event.x, event.y)
+            if image_point is not None:
+                self.image_points.append((image_point[0], image_point[1], None))
+                self.image_points = trajectory_manager.calculate_angle(
+                    self.image_points
+                )
+                self.update_fp()  # Update the content of the floating panel
+                self.redraw_image()
 
     def move_image(self, event):
         # Drag the mouse with right mouse button pressed / move the image
@@ -691,8 +744,31 @@ class GUI(tk.Frame):
         self.floating_panel_text_widget.delete(1.0, tk.END)
 
         # Insert updated coordinates
-        for i, (x, y) in enumerate(self.image_points):
-            self.floating_panel_text_widget.insert(tk.END, f"Point {i + 1} - x: ")
+        for i, (x, y, angle) in enumerate(self.image_points):
+            if i == 0:
+                self.floating_panel_text_widget.insert(tk.END, "Point 1:    ")
+            else:
+                self.floating_panel_text_widget.insert(tk.END, f"\nPoint {i + 1}:    ")
+
+            # Create Checkbox widgets
+            check_var = tk.IntVar()
+            checkbox = tk.Checkbutton(
+                self.floating_panel_text_widget,
+                bg="#262626",
+                fg="#ffffff",
+                selectcolor="#4b4b4b",
+                activebackground="#262626",
+                bd=0,
+                highlightthickness=0,
+                variable=check_var,
+                relief=tk.FLAT,
+            )
+            self.checkbox_var_widgets.insert(i, check_var)
+
+            # Adding the checkbox after the point name
+            self.floating_panel_text_widget.window_create(tk.END, window=checkbox)
+
+            self.floating_panel_text_widget.insert(tk.END, "\n   x: ")
 
             # Create Entry widgets for x and y values
             x_entry = tk.Entry(
@@ -727,28 +803,17 @@ class GUI(tk.Frame):
             )
             self.entry_widgets.append(y_entry)
 
-            # Create Checkbox widgets
-            check_var = tk.IntVar()
-            checkbox = tk.Checkbutton(
-                self.floating_panel_text_widget,
-                bg="#262626",
-                fg="#ffffff",
-                selectcolor="#4b4b4b",
-                activebackground="#262626",
-                bd=0,
-                highlightthickness=0,
-                variable=check_var,
-                relief=tk.FLAT,
-            )
-            self.checkbox_var_widgets.insert(i, check_var)
-
-            # Add the Entry and the Checkbox widgets to the Text widget
+            # Add the Entry widget and the angle to the Text widget
             self.floating_panel_text_widget.window_create(tk.END, window=x_entry)
             self.floating_panel_text_widget.insert(
-                tk.END, " - y: "
+                tk.END, "\n   y: "
             )  # Separates x and y
             self.floating_panel_text_widget.window_create(tk.END, window=y_entry)
-            self.floating_panel_text_widget.window_create(tk.END, window=checkbox)
+
+            angle_output = (
+                f"\n   angle: {format(angle, '.0f')}°" if angle is not None else ""
+            )
+            self.floating_panel_text_widget.insert(tk.END, angle_output)
             self.floating_panel_text_widget.insert(
                 tk.END, "\n"
             )  # Newline after each Point
@@ -959,7 +1024,9 @@ class GUI(tk.Frame):
         # Lines and point drawing
         if len(self.image_points) > 0:
             # Convert all image points to canvas points
-            canvas_points = [self.to_canvas_point(x, y) for x, y in self.image_points]
+            canvas_points = [
+                self.to_canvas_point(x, y) for x, y, _ in self.image_points
+            ]
             # Draw lines
             for i in range(len(canvas_points) - 1):
                 x1, y1 = canvas_points[i]
