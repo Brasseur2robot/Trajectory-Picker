@@ -1,7 +1,7 @@
 # Based on this project: https://github.com/ImagingSolution/PythonImageViewer/
 
 import tkinter as tk  # Window creation
-from tkinter import filedialog, messagebox  # Open file
+from tkinter import ttk, filedialog, messagebox  # Open file
 from PIL import Image, ImageTk  # Image management
 import math  # Revolution calculations
 import numpy as np  # Affine transformation matrix operations
@@ -26,12 +26,35 @@ class GUI(tk.Frame):
         # Config
         self.CONFIG = self.load_config()
 
+        # Set the coordinate_system based on the existent config
         coordinate_system = self.CONFIG.get("coordinate_system")
         if coordinate_system:
             self.coordinate_system = tk.StringVar(value=coordinate_system)
         else:
             self.coordinate_system = tk.StringVar(value="top-left")
         self.previous_cs = self.coordinate_system.get()
+
+        # Set the angle based on the existent config
+        angle = self.CONFIG.get("angle")
+        if angle:
+            self.angle = tk.StringVar(value=angle)
+        else:
+            self.angle = tk.StringVar(value="false")
+
+        # Set the orientation based on the existent config
+        orientation = self.CONFIG.get("orientation")
+        if orientation:
+            self.orientation = tk.StringVar(value=orientation)
+        else:
+            self.orientation = tk.StringVar(value="false")
+
+        # Set the direction based on the existent config and his possible values
+        direction = self.CONFIG.get("orientation")
+        if direction:
+            self.direction = tk.StringVar(value=orientation)
+        else:
+            self.direction = tk.StringVar(value="false")
+        self.direction_values = ("foward", "backward")
 
         # Basic window setting
         self.master.geometry("600x400")
@@ -48,6 +71,18 @@ class GUI(tk.Frame):
 
         # Trajectory points
         self.image_points = []  # list of (x, y) tuples in image coordinates
+
+        # Point object
+        self.points = []
+
+        # Selected point index
+        self.selected_point_idx = None
+
+        # Preview point
+        self.preview_mode = False  # True while we’re waiting for a click
+        self.preview_point_coords = (
+            None  # Canvas point used for the “transparent” preview
+        )
 
         # Initial affine transformation matrix
         self.reset_transform()
@@ -190,19 +225,101 @@ class GUI(tk.Frame):
             label="Top left",
             variable=self.coordinate_system,
             value="top-left",
-            command=lambda: self.coordinate_system_wrapper(),
+            command=lambda: self.wrapper_coordinate_system(),
         )
         self.cs_sub_menu.add_radiobutton(
             label="Bottom left",
             variable=self.coordinate_system,
             value="bottom-left",
-            command=lambda: self.coordinate_system_wrapper(),
+            command=lambda: self.wrapper_coordinate_system(),
+        )
+
+        # Angle sub-menu
+        self.angle_sub_menu = tk.Menu(
+            self.trajectory_menu,
+            tearoff=tk.OFF,
+            bg="#1d1d1d",
+            fg="#ffffff",
+            activebackground="#eeb604",
+            relief=tk.FLAT,
+            bd=0,
+        )
+        self.trajectory_menu.add_cascade(label="Angle", menu=self.angle_sub_menu)
+
+        self.angle_sub_menu.add_radiobutton(
+            label="False",
+            variable=self.angle,
+            value="false",
+            command=lambda: self.wrapper_angle(),
+        )
+
+        self.angle_sub_menu.add_radiobutton(
+            label="True",
+            variable=self.angle,
+            value="true",
+            command=lambda: self.wrapper_angle(),
+        )
+
+        # Orientation sub-menu
+        self.orientation_sub_menu = tk.Menu(
+            self.trajectory_menu,
+            tearoff=tk.OFF,
+            bg="#1d1d1d",
+            fg="#ffffff",
+            activebackground="#eeb604",
+            relief=tk.FLAT,
+            bd=0,
+        )
+        self.trajectory_menu.add_cascade(
+            label="Orientation", menu=self.orientation_sub_menu
+        )
+
+        self.orientation_sub_menu.add_radiobutton(
+            label="False",
+            variable=self.orientation,
+            value="false",
+            command=lambda: self.wrapper_orientation(),
+        )
+
+        self.orientation_sub_menu.add_radiobutton(
+            label="True",
+            variable=self.orientation,
+            value="true",
+            command=lambda: self.wrapper_orientation(),
+        )
+
+        # Direction sub-menu
+        self.direction_sub_menu = tk.Menu(
+            self.trajectory_menu,
+            tearoff=tk.OFF,
+            bg="#1d1d1d",
+            fg="#ffffff",
+            activebackground="#eeb604",
+            relief=tk.FLAT,
+            bd=0,
+        )
+        self.trajectory_menu.add_cascade(
+            label="Direction", menu=self.direction_sub_menu
+        )
+
+        self.direction_sub_menu.add_radiobutton(
+            label="False",
+            variable=self.direction,
+            value="false",
+            command=lambda: self.wrapper_direction(),
+        )
+
+        self.direction_sub_menu.add_radiobutton(
+            label="True",
+            variable=self.direction,
+            value="true",
+            command=lambda: self.wrapper_direction(),
         )
 
         self.trajectory_menu.add_command(
             label="Add a new point",
-            command=lambda: self.create_point(event="Menu"),
-            accelerator="Left click",
+            command=lambda: self.create_preview(),
+            accelerator="Control + P",
         )
 
         self.trajectory_menu.add_command(
@@ -267,8 +384,8 @@ class GUI(tk.Frame):
 
         # Mouse event
         self.master.bind(
-            "<Button-1>", self.create_point
-        )  # Left mouse button / create a point
+            "<Control-p>", self.create_preview
+        )  # Control p keys / create a point
         self.master.bind(
             "<Button-2>", self.delete_point
         )  # Middle mouse button click / delete latest point
@@ -309,7 +426,7 @@ class GUI(tk.Frame):
     # Define the floating panel
     def create_floating_panel(self):
         self.floating_panel_minimized = False
-        self.floating_panel_width = 200
+        self.floating_panel_width = 220
         # Create a frame inside the canvas
         self.floating_panel = tk.Toplevel(self.master)
         self.floating_panel.minsize(width=self.floating_panel_width, height=300)
@@ -370,8 +487,8 @@ class GUI(tk.Frame):
         # Create a list of Entry widgets to edit coordinates
         self.entry_widgets = []
 
-        # Create a list of Checkbox var to update points
-        self.checkbox_var_widgets = []
+        # Create a list of Checkbox var to delete points
+        self.checkbox_del_widgets = []
 
         # Export & delete buttons
         tk.Button(
@@ -447,9 +564,21 @@ class GUI(tk.Frame):
             file_extension = os.path.splitext(file_path)[-1].lower()
             try:
                 if file_extension == ".json":
-                    coordinates_to_json(self.image_points, file_path)
+                    trajectory_manager.coordinates_to_json(
+                        self.image_points,
+                        file_path,
+                        self.angle.get(),
+                        self.orientation.get(),
+                        self.direction.get(),
+                    )
                 elif file_extension == ".csv":
-                    coordinates_to_csv(self.image_points, file_path)
+                    trajectory_manager.coordinates_to_csv(
+                        self.image_points,
+                        file_path,
+                        self.angle.get(),
+                        self.orientation.get(),
+                        self.direction.get(),
+                    )
                 else:
                     messagebox.showerror("Unsupported File", "File type not supported.")
             except Exception as e:
@@ -470,11 +599,13 @@ class GUI(tk.Frame):
             file_extension = os.path.splitext(file_path)[-1].lower()
             try:
                 if file_extension == ".json":
-                    self.image_points = json_to_coordinates(file_path)
+                    self.image_points = trajectory_manager.json_to_coordinates(
+                        file_path
+                    )
                     self.update_fp()
                     self.redraw_image()
                 elif file_extension == ".csv":
-                    self.image_points = csv_to_coordinates(file_path)
+                    self.image_points = trajectory_manager.csv_to_coordinates(file_path)
                     self.update_fp()
                     self.redraw_image()
                 else:
@@ -533,7 +664,7 @@ class GUI(tk.Frame):
         if file_path:
             self.save_config("last_opened_image", file_path)
 
-    def coordinate_system_wrapper(self):
+    def wrapper_coordinate_system(self):
         # Wrapper to save the coordinate_system in the CONFIG_FILE and redraw_image
         response = "yes"
         if self.previous_cs == self.coordinate_system.get():
@@ -553,6 +684,22 @@ class GUI(tk.Frame):
         elif self.previous_cs != self.coordinate_system.get():
             self.coordinate_system.set(self.previous_cs)
 
+    def wrapper_angle(self):
+        # Wrapper to save the angle value in the CONFIG_FILE and update_fp
+        self.save_config("angle", self.angle.get())
+        self.update_fp()
+
+    def wrapper_orientation(self):
+        # Wrapper to save the orientation value in the CONFIG_FILE and update_fp
+        self.save_config("orientation", self.orientation.get())
+        self.update_fp()
+
+    def wrapper_direction(self):
+        """Wrapper to save the orientation value in the CONFIG_FILE and update_fp"""
+
+        self.save_config("direction", self.direction.get())
+        self.update_fp()
+
     # -------------------------------------------------------------------------------
     # Define mouse & keyboard event
     # -------------------------------------------------------------------------------
@@ -566,7 +713,7 @@ class GUI(tk.Frame):
         if event == None:
             points_to_pop = [
                 i
-                for i, checkbox_value in enumerate(self.checkbox_var_widgets)
+                for i, checkbox_value in enumerate(self.checkbox_del_widgets)
                 if checkbox_value.get() == 1
             ]
             for index in reversed(
@@ -581,13 +728,12 @@ class GUI(tk.Frame):
                 self.update_fp()  # Update the content of the floating panel
                 self.redraw_image()  # Update the canvas
 
-    def create_point(self, event):
-        # Left mouse button pressed / create a point
+    """ Old config
+    def create_point(self, event=None):
+        # Control p keys pressed / create a point
         if self.pil_image is None:
             return
-        if event == "Menu":
-            return
-            # TODO:
+        self.preview_point()
         else:
             image_point = self.to_image_point(event.x, event.y)
             if image_point is not None:
@@ -596,7 +742,62 @@ class GUI(tk.Frame):
                     self.image_points
                 )
                 self.update_fp()  # Update the content of the floating panel
-                self.redraw_image()
+                self.redraw_image()"""
+
+    def create_preview(self, event=None):
+        # Control p keys pressed / create a preview point that can be added to the canva on click
+        # "Preview" the point that will be created
+
+        if self.pil_image is None:
+            return
+
+        if self.preview_mode:  # If preview is already active exit the function
+            return
+
+        self.preview_mode = True
+
+        self.preview_motion_bind = self.canvas.bind("<Motion>", self.move_preview)
+        self.preview_button_bind = self.canvas.bind("<Button-1>", self.create_point)
+        self.preview_escape_bind = self.master.bind("<Escape>", self.leave_preview)
+
+        self.move_preview(event)
+
+    def move_preview(self, event):
+        # Create and (re)draw the transparent preview point
+        if not self.preview_mode:
+            return
+
+        preview_point_coords = self.to_image_point(event.x, event.y)
+        if preview_point_coords is not None:
+            self.preview_point_coords = [
+                [preview_point_coords[0], preview_point_coords[1], None, None, None]
+            ]
+            self.preview_point_coords = trajectory_manager.coordinates_to_float64(
+                self.preview_point_coords
+            )
+            self.redraw_image()
+
+    def create_point(self, event):
+        self.image_points.append(self.preview_point_coords[0])
+        self.image_points = trajectory_manager.calculate_angle(self.image_points)
+        self.preview_mode = False
+        self.preview_point_coords = None
+        self.update_fp()
+        self.redraw_image()
+        self.canvas.unbind("<Motion>", self.preview_motion_bind)
+        self.canvas.unbind("<Button-1>", self.preview_button_bind)
+        self.master.unbind("<Escape>", self.preview_escape_bind)
+        return
+
+    def leave_preview(self, event):
+        self.preview_mode = False
+        self.preview_point_coords = None
+        self.update_fp()
+        self.redraw_image()
+        self.canvas.unbind("<Motion>", self.preview_motion_bind)
+        self.canvas.unbind("<Button-1>", self.preview_button_bind)
+        self.canvas.unbind("<Escape>", self.preview_escape_bind)
+        return
 
     def move_image(self, event):
         # Drag the mouse with right mouse button pressed / move the image
@@ -739,12 +940,12 @@ class GUI(tk.Frame):
     def update_fp(self):
         # Update the floating panel text widget with the current list of coordinates
         # Clear current content
-        self.checkbox_var_widgets.clear()
+        self.checkbox_del_widgets.clear()
         self.entry_widgets.clear()
         self.floating_panel_text_widget.delete(1.0, tk.END)
 
         # Insert updated coordinates
-        for i, (x, y, angle) in enumerate(self.image_points):
+        for i, (x, y, angle, orientation, direction) in enumerate(self.image_points):
             if i == 0:
                 self.floating_panel_text_widget.insert(tk.END, "Point 1:    ")
             else:
@@ -763,7 +964,7 @@ class GUI(tk.Frame):
                 variable=check_var,
                 relief=tk.FLAT,
             )
-            self.checkbox_var_widgets.insert(i, check_var)
+            self.checkbox_del_widgets.insert(i, check_var)
 
             # Adding the checkbox after the point name
             self.floating_panel_text_widget.window_create(tk.END, window=checkbox)
@@ -803,25 +1004,133 @@ class GUI(tk.Frame):
             )
             self.entry_widgets.append(y_entry)
 
-            # Add the Entry widget and the angle to the Text widget
+            # Add the Entry widget (x, y and orientation), direction drop-down menu and the angle to the Text widget
             self.floating_panel_text_widget.window_create(tk.END, window=x_entry)
             self.floating_panel_text_widget.insert(
                 tk.END, "\n   y: "
             )  # Separates x and y
             self.floating_panel_text_widget.window_create(tk.END, window=y_entry)
 
-            angle_output = (
-                f"\n   angle: {format(angle, '.0f')}°" if angle is not None else ""
-            )
-            self.floating_panel_text_widget.insert(tk.END, angle_output)
+            if self.orientation.get() == "true":
+                orientation_entry = tk.Entry(
+                    self.floating_panel_text_widget,
+                    width=5,
+                    bg="#4b4b4b",
+                    fg="white",
+                    relief=tk.FLAT,
+                )
+                orientation_entry.bind(
+                    "<FocusOut>",
+                    lambda event, idx=i: self.wrapper_update_orientation(event, idx),
+                )
+                orientation_entry.insert(
+                    0, format(orientation, ".0f") if orientation else ""
+                )  # Set the initial orientation, empty if not set
+
+                self.entry_widgets.append(orientation_entry)
+                self.floating_panel_text_widget.insert(tk.END, "\n   orientation: ")
+                self.floating_panel_text_widget.window_create(
+                    tk.END, window=orientation_entry
+                )
+            if self.direction.get() == "true":
+                direction_entry = tk.Entry(
+                    self.floating_panel_text_widget,
+                    width=5,
+                    bg="#4b4b4b",
+                    fg="white",
+                    relief=tk.FLAT,
+                )
+                direction_entry.bind(
+                    "<FocusOut>",
+                    lambda event, idx=i: self.wrapper_update_direction(event, idx),
+                )
+                direction_entry.insert(
+                    0, direction if direction else ""
+                )  # Set the initial direction, empty if not set
+
+                self.entry_widgets.append(direction_entry)
+                self.floating_panel_text_widget.insert(tk.END, "\n   direction: ")
+                self.floating_panel_text_widget.window_create(
+                    tk.END, window=direction_entry
+                )
+
+            if self.angle.get() == "true":
+                angle_output = (
+                    f"\n   angle: {format(angle, '.0f')}°" if angle is not None else ""
+                )
+                self.floating_panel_text_widget.insert(tk.END, angle_output)
+
             self.floating_panel_text_widget.insert(
                 tk.END, "\n"
             )  # Newline after each Point
 
     def wrapper_update_coordinate(self, event, idx: int):
-        self.image_points = update_coordinates(
-            idx, self.image_points, self.entry_widgets
+        new_x, new_y = (
+            self.entry_widgets[4 * idx].get(),
+            self.entry_widgets[4 * idx + 1].get(),
         )
+
+        try:
+            new_x, new_y = (
+                np.float64(new_x),
+                np.float64(new_y),
+            )
+        except Exception as e:
+            messagebox.showerror("Error", "Coordinates must be number")
+            self.update_fp()
+            return
+
+        if not (0 <= new_x <= self.pil_image.width) or not (
+            0 <= new_y <= self.pil_image.height
+        ):
+            messagebox.showerror(
+                "Error", "Coordinates cannot be outside the dimensions of the image"
+            )
+            self.update_fp()
+            return
+
+        if not (isinstance(new_x, np.float64) or isinstance(new_y, np.float64)):
+            return
+
+        self.image_points = trajectory_manager.update_trajectory(
+            idx, self.image_points, [0, 1], [new_x, new_y]
+        )
+        self.redraw_image()
+
+    def wrapper_update_orientation(self, event, idx):
+        """Update the orientation based on the content of the orientation entry widget"""
+
+        new_orientation = self.entry_widgets[4 * idx + 2].get()
+
+        try:
+            new_orientation = float(new_orientation)
+        except Exception as e:
+            messagebox.showerror("Error", "Orientation must be number")
+            self.update_fp()
+            return
+
+        if not (-180 <= new_orientation <= 180):
+            messagebox.showerror(
+                "Error", "Orientation must be a value between -180 and 180"
+            )
+            self.update_fp()
+            return
+
+        self.image_points = trajectory_manager.update_trajectory(
+            idx, self.image_points, [3], [new_orientation]
+        )
+        self.redraw_image()
+
+    def wrapper_update_direction(self, event, idx):
+        """Update the direction based on the content of the orientation entry widget"""
+
+        new_direction = self.entry_widgets[4 * idx + 3].get()
+        print(new_direction)
+
+        self.image_points = trajectory_manager.update_trajectory(
+            idx, self.image_points, [4], [new_direction]
+        )
+        print(self.image_points)
         self.redraw_image()
 
     # -------------------------------------------------------------------------------
@@ -946,7 +1255,6 @@ class GUI(tk.Frame):
             or image_point[1] > self.pil_image.height
         ):
             return None
-
         return image_point
 
     def to_canvas_point(self, image_x, image_y):
@@ -1021,11 +1329,32 @@ class GUI(tk.Frame):
 
         self.image = im
 
+        # Preview point drawing
+        if self.preview_point_coords:
+            index = len(self.image_points)
+            preview_point_coords = [
+                self.to_canvas_point(x, y)
+                for x, y, _, _, _ in self.preview_point_coords
+            ]
+            for x, y in preview_point_coords:
+                self.canvas.create_oval(
+                    x - 7,
+                    y - 7,
+                    x + 7,
+                    y + 7,
+                    fill="white",
+                    outline="black",
+                    stipple="gray50",
+                )
+                self.canvas.create_text(
+                    x, y, text=str(index + 1), fill="black", font=("Helvetica", 9)
+                )
+
         # Lines and point drawing
         if len(self.image_points) > 0:
             # Convert all image points to canvas points
             canvas_points = [
-                self.to_canvas_point(x, y) for x, y, _ in self.image_points
+                self.to_canvas_point(x, y) for x, y, _, _, _ in self.image_points
             ]
             # Draw lines
             for i in range(len(canvas_points) - 1):
@@ -1035,12 +1364,19 @@ class GUI(tk.Frame):
 
             # Draw points
             for index, (x, y) in enumerate(canvas_points):
-                self.canvas.create_oval(
-                    x - 7, y - 7, x + 7, y + 7, fill="white", outline="black"
+                point = self.canvas.create_oval(
+                    x - 7,
+                    y - 7,
+                    x + 7,
+                    y + 7,
+                    fill="white",
+                    outline="black",
+                    tags=("point",),
                 )
                 self.canvas.create_text(
                     x, y, text=str(index + 1), fill="black", font=("Helvetica", 9)
                 )
+                # TODO: self.points.append(point)
 
     def redraw_image(self):
         # Redraw the image

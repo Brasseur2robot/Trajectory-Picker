@@ -9,9 +9,8 @@ wheels/
 
 # Assets
 assets/*
-!assets/playmat_2025_FINAL.png
-!assets/playmat_2025_FINAL.svg
-!assets/laymat_2025_FINAL_3000x2000.png
+!assets/2025
+!assets/2026
 
 # Config
 config.json

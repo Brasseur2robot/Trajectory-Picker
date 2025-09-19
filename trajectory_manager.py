@@ -1,13 +1,40 @@
 import csv
 import json
+from types import new_class
 import numpy as np
 from math import atan2, pi
 
+FIELDS = ["x", "y", "angle", "orientation", "direction"]
 
-def coordinates_to_json(coordinates: list, file_path: str):
+
+def coordinates_to_json(
+    coordinates: list,
+    file_path: str,
+    is_angle: str,
+    is_orientation: str,
+    is_direction: str,
+):
     # Convert coordinates and add them to a json file
 
     coordinates = coordinates_to_int(coordinates)
+
+    mask = [
+        True,
+        True,
+        is_angle.lower() == "true",
+        is_orientation.lower() == "true",
+        is_direction.lower() == "true",
+    ]
+
+    coordinates = [
+        dict(
+            zip(
+                [field for field, keep in zip(FIELDS, mask) if keep],
+                [val for val, keep in zip(value, mask) if keep],
+            )
+        )
+        for value in coordinates
+    ]
 
     with open(file_path, mode="w") as file:
         json.dump(coordinates, file, indent=4)
@@ -16,51 +43,64 @@ def coordinates_to_json(coordinates: list, file_path: str):
 def json_to_coordinates(file_path: str):
     # Convert the content of a json file to coordinates array
     with open(file_path, "r", encoding="utf-8") as json_file:
-        data = json.load(json_file)
-    data = coordinates_to_float64(data)
+        json_data = json.load(json_file)
+    json_data = [[dict.get(key, None) for key in FIELDS] for dict in json_data]
+    json_data = coordinates_to_float64(json_data)
+    print(json_data)
 
-    if data:
-        return data
+    if json_data:
+        return json_data
 
 
-def coordinates_to_csv(coordinates: list, file_path: str):
+def coordinates_to_csv(
+    coordinates: list,
+    file_path: str,
+    is_angle: str,
+    is_orientation: str,
+    is_direction: str,
+):
     # Convert coordinates and add them to a csv file
 
     coordinates = coordinates_to_int(coordinates)
 
+    mask = [
+        True,
+        True,
+        is_angle.lower() == "true",
+        is_orientation.lower() == "true",
+        is_direction.lower() == "true",
+    ]
+
+    coordinates = [
+        [val for val, keep in zip(value, mask) if keep] for value in coordinates
+    ]
+
     with open(file_path, mode="w", newline="") as file:
         # Create header and add coordinates to a csv file
         writer = csv.writer(file)
-        writer.writerow(["x", "y", "angle"])
+        writer.writerow(header for header, keep in zip(FIELDS, mask) if keep)
         writer.writerows(coordinates)
 
 
 def csv_to_coordinates(file_path: str):
     # Convert the content of a csv file to coordinates array
-    coordinates = []
+    # TODO: import the trajectory depending of the header of the csv
     with open(file_path, newline="", encoding="utf-8") as csv_file:
-        reader = csv.DictReader(csv_file)
-        for row in reader:
-            if row["angle"] == "":
-                coordinates.append((row["x"], row["y"], None))
-            else:
-                coordinates.append((row["x"], row["y"], row["angle"]))
+        reader = csv.reader(csv_file)
+        next(reader)
+        coordinates = [[None if cell == "" else cell for cell in row] for row in reader]
         coordinates = coordinates_to_float64(coordinates)
 
     if coordinates:
         return coordinates
 
 
-def update_coordinates(idx: int, image_point, entry_widgets: list):
-    # Update the coordinates list when the user changes a value
-    x_entry, y_entry = entry_widgets[2 * idx], entry_widgets[2 * idx + 1]
+def update_trajectory(idx: int, image_point, updated_index: list, new_values: list):
+    """Update the trajectory idx based on the updated_index list and the new_values list"""
 
-    if not isinstance(x_entry.get(), float) or isinstance(y_entry.get(), float):
-        return image_point
-
-    new_x = np.float64(x_entry.get())
-    new_y = np.float64(y_entry.get())
-    image_point[idx] = (new_x, new_y)
+    print(new_values[0])
+    for i in range(len(updated_index)):
+        image_point[idx][updated_index[i]] = new_values[i]
 
     return image_point
 
@@ -71,8 +111,14 @@ def calculate_angle(coordinates: list):
         return coordinates
     coordinates = coordinates_to_int(coordinates)
     trajectory_points = [
-        (x, y, atan2(coordinates[i + 1][1] - y, coordinates[i + 1][0] - x) * 180 / pi)
-        for i, (x, y, _) in enumerate(coordinates[:-1])
+        [
+            x,
+            y,
+            atan2(coordinates[i + 1][1] - y, coordinates[i + 1][0] - x) * 180 / pi,
+            orientation,
+            direction,
+        ]
+        for i, (x, y, _, orientation, direction) in enumerate(coordinates[:-1])
     ]
     trajectory_points.append(coordinates[-1])
     return trajectory_points
@@ -81,7 +127,7 @@ def calculate_angle(coordinates: list):
 def coordinates_to_int(coordinates: list):
     # Convert and round all coordinates from np.float64 to int
     return [
-        tuple(int(round(coordinate)) for coordinate in sublist[:2]) + (sublist[2],)
+        [int(round(coordinate)) for coordinate in sublist[:2]] + sublist[2:]
         for sublist in coordinates
     ]
 
@@ -89,7 +135,8 @@ def coordinates_to_int(coordinates: list):
 def coordinates_to_float64(coordinates: list):
     # Convert all coordinates from int to np.float64
     return [
-        tuple(np.float64(coordinate) for coordinate in sublist[:2])
-        + (float(sublist[2]) if sublist[2] is not None else None,)
+        [np.float64(coordinate) for coordinate in sublist[:2]]
+        + [float(value) if value is not None else None for value in sublist[2:-1]]
+        + [sublist[-1]]
         for sublist in coordinates
     ]
