@@ -21,8 +21,3 @@ config.json
 # Direnv
 .direnv
 .envrc
-
-# Flake
-flake.nix
-flake.lock
-shell.nix

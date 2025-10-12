@@ -1,17 +1,28 @@
 # Based on this project: https://github.com/ImagingSolution/PythonImageViewer/
 
 import tkinter as tk  # Window creation
-from tkinter import ttk, filedialog, messagebox  # Open file
+from tkinter import ttk, StringVar, filedialog, messagebox  # Open file
 from PIL import Image, ImageTk  # Image management
 import math  # Revolution calculations
 import numpy as np  # Affine transformation matrix operations
 import os  # Directory operations
 import json  # Json operations
+
 from trajectory_manager import *
 import trajectory_manager
+from actions_panel import toggle_actions_panel
+from menu_bar import create_menu_bar
+from info_bar import create_info_bar
+from shortcuts import create_default_shortcuts
 
 
 class GUI(tk.Frame):
+    # Import methods from other files (easier to maintain)
+    create_menu_bar = create_menu_bar
+    create_info_bar = create_info_bar
+    toggle_actions_panel = toggle_actions_panel
+    create_default_shortcuts = create_default_shortcuts
+
     def __init__(
         self,
         master=None,
@@ -37,24 +48,30 @@ class GUI(tk.Frame):
         # Set the angle based on the existent config
         angle = self.CONFIG.get("angle")
         if angle:
-            self.angle = tk.StringVar(value=angle)
+            self.angle = tk.IntVar(value=angle)
         else:
-            self.angle = tk.StringVar(value="false")
+            self.angle = tk.IntVar(value=0)
 
         # Set the orientation based on the existent config
         orientation = self.CONFIG.get("orientation")
         if orientation:
-            self.orientation = tk.StringVar(value=orientation)
+            self.orientation = tk.IntVar(value=orientation)
         else:
-            self.orientation = tk.StringVar(value="false")
+            self.orientation = tk.IntVar(value=0)
 
         # Set the direction based on the existent config and his possible values
-        direction = self.CONFIG.get("orientation")
+        direction = self.CONFIG.get("direction")
         if direction:
-            self.direction = tk.StringVar(value=orientation)
+            self.direction = tk.IntVar(value=direction)
         else:
-            self.direction = tk.StringVar(value="false")
-        self.direction_values = ("foward", "backward")
+            self.direction = tk.IntVar(value=0)
+
+        # Set the action based on the existent config and his possible values
+        action = self.CONFIG.get("action")
+        if action:
+            self.action = tk.IntVar(value=action)
+        else:
+            self.action = tk.IntVar(value=0)
 
         # Basic window setting
         self.master.geometry("600x400")
@@ -65,18 +82,18 @@ class GUI(tk.Frame):
         # Window title
         self.master.title(self.my_title)
 
-        # Window component
-        self.create_menu()  # Menu creation
-        self.create_widget()  # Widget creation
+        # Window component & shortcuts
+        self.create_menu_bar()
+        self.create_info_bar()
+        self.create_widget()
+        self.create_default_shortcuts()
 
         # Trajectory points
         self.image_points = []  # list of (x, y) tuples in image coordinates
 
-        # Point object
-        self.points = []
-
         # Selected point index
         self.selected_point_idx = None
+        self.min_distance = None
 
         # Preview point
         self.preview_mode = False  # True while we’re waiting for a click
@@ -84,288 +101,32 @@ class GUI(tk.Frame):
             None  # Canvas point used for the “transparent” preview
         )
 
+        # Actions panel variable to know if toggle_actions_panel have to display the panel or close it
+        # self.actions is the list of possible actions for a point
+        self.actions_panel = None
+        self.actions = []
+
+        # Variable to toggle symmetry
+        self.symmetry = False
+
         # Initial affine transformation matrix
         self.reset_transform()
 
+        # Render the last opened image
         self.master.after(
             100, self.load_last_opened_image
         )  # TODO: Wait 60ms to make sure everything is loaded, if done too fast it won't show the image // Bug
+
+        # Render the last opened trajectory
+        if self.CONFIG.get("last_opened_trajectory"):
+            self.load_file(file_path=self.CONFIG.get("last_opened_trajectory"))
 
     # Close the window
     def menu_quit_clicked(self, event=None):
         self.master.destroy()
 
-    # create_menu method
-    def create_menu(self):
-        self.menu_bar = tk.Menu(
-            self,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            bd=0,
-            relief=tk.FLAT,
-        )  # Create menu_bar instance from Menu class
-
-        # File menu
-        self.file_menu = tk.Menu(
-            self.menu_bar,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.menu_bar.add_cascade(label="File", menu=self.file_menu)
-
-        self.file_menu.add_command(
-            label="Open image", command=self.load_image, accelerator="Ctrl + O"
-        )
-        self.file_menu.add_command(
-            label="Open trajectory", command=self.load_file, accelerator="Ctrl + T"
-        )
-        self.file_menu.add_command(
-            label="Save trajectory", command=self.save_file, accelerator="Ctrl + S"
-        )
-        self.file_menu.add_separator()  # Add separator
-        self.file_menu.add_command(
-            label="Exit", command=self.menu_quit_clicked, accelerator="Ctrl + Q"
-        )
-
-        self.menu_bar.bind_all(
-            "<Control-o>", self.load_image
-        )  # Create a bind to open an image to load
-        self.menu_bar.bind_all(
-            "<Control-t>", self.load_file
-        )  # Create a bind to open a trajectory file
-        self.menu_bar.bind_all(
-            "<Control-s>", self.save_file
-        )  # Create a bind to save the current trajectory to a file
-        self.menu_bar.bind_all(
-            "<Control-q>", self.menu_quit_clicked
-        )  # Create a bind to close the app
-
-        # Floating panel menu
-        self.fp_menu = tk.Menu(
-            self.menu_bar,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.menu_bar.add_cascade(label="Floating panel", menu=self.fp_menu)
-
-        self.fp_menu.add_command(label="Open", command=self.toggle_panel_open)
-        # Old config:
-        # self.fp_menu.add_command(label="Resize", command=self.toggle_panel_size)
-        self.fp_menu.add_command(label="Close", command=self.toggle_panel_close)
-
-        # Image menu
-        self.image_menu = tk.Menu(
-            self.menu_bar,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.menu_bar.add_cascade(label="Image", menu=self.image_menu)
-
-        self.image_menu.add_command(
-            label="Zoom-in", command=lambda: self.zoom(None, 1), accelerator="Ctrl + +"
-        )
-        self.image_menu.add_command(
-            label="Zoom-out", command=lambda: self.zoom(None, 0), accelerator="Ctrl + -"
-        )
-        self.image_menu.add_command(
-            label="Recenter",
-            command=lambda: self.recenter_image(None),
-            accelerator="Double right click",
-        )
-        self.image_menu.add_command(
-            label="Rotate clockwise",
-            command=lambda: self.rotate_image(5),
-            accelerator="Ctrl + M",
-        )
-        self.image_menu.add_command(
-            label="Rotate counterclockwise",
-            command=lambda: self.rotate_image(-5),
-            accelerator="Ctrl + L",
-        )
-        # Trajectory menu
-        self.trajectory_menu = tk.Menu(
-            self.menu_bar,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.menu_bar.add_cascade(label="Trajectory", menu=self.trajectory_menu)
-
-        # Coordinate system sub-menu
-        self.cs_sub_menu = tk.Menu(
-            self.trajectory_menu,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.trajectory_menu.add_cascade(
-            label="Coordinate system", menu=self.cs_sub_menu
-        )  # cs means coordinate system here
-
-        self.cs_sub_menu.add_radiobutton(
-            label="Top left",
-            variable=self.coordinate_system,
-            value="top-left",
-            command=lambda: self.wrapper_coordinate_system(),
-        )
-        self.cs_sub_menu.add_radiobutton(
-            label="Bottom left",
-            variable=self.coordinate_system,
-            value="bottom-left",
-            command=lambda: self.wrapper_coordinate_system(),
-        )
-
-        # Angle sub-menu
-        self.angle_sub_menu = tk.Menu(
-            self.trajectory_menu,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.trajectory_menu.add_cascade(label="Angle", menu=self.angle_sub_menu)
-
-        self.angle_sub_menu.add_radiobutton(
-            label="False",
-            variable=self.angle,
-            value="false",
-            command=lambda: self.wrapper_angle(),
-        )
-
-        self.angle_sub_menu.add_radiobutton(
-            label="True",
-            variable=self.angle,
-            value="true",
-            command=lambda: self.wrapper_angle(),
-        )
-
-        # Orientation sub-menu
-        self.orientation_sub_menu = tk.Menu(
-            self.trajectory_menu,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.trajectory_menu.add_cascade(
-            label="Orientation", menu=self.orientation_sub_menu
-        )
-
-        self.orientation_sub_menu.add_radiobutton(
-            label="False",
-            variable=self.orientation,
-            value="false",
-            command=lambda: self.wrapper_orientation(),
-        )
-
-        self.orientation_sub_menu.add_radiobutton(
-            label="True",
-            variable=self.orientation,
-            value="true",
-            command=lambda: self.wrapper_orientation(),
-        )
-
-        # Direction sub-menu
-        self.direction_sub_menu = tk.Menu(
-            self.trajectory_menu,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.trajectory_menu.add_cascade(
-            label="Direction", menu=self.direction_sub_menu
-        )
-
-        self.direction_sub_menu.add_radiobutton(
-            label="False",
-            variable=self.direction,
-            value="false",
-            command=lambda: self.wrapper_direction(),
-        )
-
-        self.direction_sub_menu.add_radiobutton(
-            label="True",
-            variable=self.direction,
-            value="true",
-            command=lambda: self.wrapper_direction(),
-        )
-
-        self.trajectory_menu.add_command(
-            label="Add a new point",
-            command=lambda: self.create_preview(),
-            accelerator="Control + P",
-        )
-
-        self.trajectory_menu.add_command(
-            label="Delete last point",
-            command=lambda: self.delete_point(event=not None),
-            accelerator="Middle click",
-        )
-
-        # TODO: Option & help menu
-        """self.options_menu = tk.Menu(
-            self.menu_bar,
-            tearoff=tk.OFF,
-            bg="#1d1d1d",
-            fg="#ffffff",
-            activebackground="#eeb604",
-            relief=tk.FLAT,
-            bd=0,
-        )
-        self.menu_bar.add_cascade(label="Options & help", menu=self.options_menu)"""
-
-        self.master.config(menu=self.menu_bar)  # Menu bar arrangement
-
     # Define create_widget method
     def create_widget(self):
-        # Status bar equivalent (added to parent)
-        self.frame_statusbar = tk.Frame(self.master, bg="#1d1d1d")
-        self.label_image_info = tk.Label(
-            self.frame_statusbar,
-            text="image info",
-            bg="#1d1d1d",
-            fg="#ffffff",
-            anchor=tk.E,
-            padx=5,
-        )
-        self.label_image_pixel = tk.Label(
-            self.frame_statusbar,
-            text="(x, y)",
-            bg="#1d1d1d",
-            fg="#ffffff",
-            anchor=tk.W,
-            padx=5,
-        )
-        self.label_image_info.pack(side=tk.RIGHT)
-        self.label_image_pixel.pack(side=tk.LEFT)
-        self.frame_statusbar.pack(side=tk.BOTTOM, fill=tk.X)
-
         # Canvas
         self.canvas = tk.Canvas(
             self.master, background="#262626", bd=0, highlightthickness=0
@@ -375,58 +136,19 @@ class GUI(tk.Frame):
         )  # Same as Dock.Fill in both of these
 
         # Canvas / Menu separator
-        self.separator_cm = tk.Frame(self.canvas, bg="#EEB604", height="2")
+        self.separator_cm = ttk.Frame(self.canvas, style="primary.TFrame", height="2")
         self.separator_cm.pack(side="top", fill="x")
 
         # Canvas / Status bar separator
-        self.separator_csb = tk.Frame(self.canvas, bg="#EEB604", height="2")
+        self.separator_csb = ttk.Frame(self.canvas, style="primary.TFrame", height="2")
         self.separator_csb.pack(side="bottom", fill="x")
-
-        # Mouse event
-        self.master.bind(
-            "<Control-p>", self.create_preview
-        )  # Control p keys / create a point
-        self.master.bind(
-            "<Button-2>", self.delete_point
-        )  # Middle mouse button click / delete latest point
-        self.master.bind(
-            "<Button-3>", self.set_move_image
-        )  # Right mouse button / set the current coordinates to move the image
-        self.master.bind(
-            "<B3-Motion>", self.move_image
-        )  # Left mouse button with movement / move the image
-        self.master.bind(
-            "<Motion>", self.change_coordinates
-        )  # Mouse movement / change coordinates
-        self.master.bind(
-            "<Double-Button-3>", self.recenter_image
-        )  # Right mouse button double click / recenter the image
-        self.master.bind("<MouseWheel>", self.zoom)  # Mouse wheel / zoom
-
-        # Keyboard event
-        self.master.bind(
-            "<Control-equal>", lambda event: self.zoom(event, 1)
-        )  # Crtl + keys / zoom-in
-        self.master.bind(
-            "<Control-minus>", lambda event: self.zoom(event, 0)
-        )  # Ctrl - keys / zoom-out
-
-        # The following bind didn't worked with leftarrow and rightarrow :(
-        self.master.bind(
-            "<Control-m>",
-            lambda event: self.rotate_image(5.0),
-        )  # Ctrl left / rotate clockwise
-        self.master.bind(
-            "<Control-l>", lambda event: self.rotate_image(-5.0)
-        )  # Ctrl right / rotate counterclockwise
 
         # Create the floating panel
         self.create_floating_panel()
 
     # Define the floating panel
     def create_floating_panel(self):
-        self.floating_panel_minimized = False
-        self.floating_panel_width = 220
+        self.floating_panel_width = 250
         # Create a frame inside the canvas
         self.floating_panel = tk.Toplevel(self.master)
         self.floating_panel.minsize(width=self.floating_panel_width, height=300)
@@ -435,9 +157,7 @@ class GUI(tk.Frame):
         self.floating_panel.configure(bg="#262626")
 
         # Create a title bar
-        self.floating_panel_titlebar = tk.Frame(
-            self.floating_panel, bg="#1d1d1d", relief=tk.RAISED
-        )
+        self.floating_panel_titlebar = ttk.Frame(self.floating_panel)
         self.floating_panel_titlebar.pack(fill=tk.X)
 
         self.floating_panel_titlebar.pack_propagate(
@@ -447,11 +167,9 @@ class GUI(tk.Frame):
             height=20
         )  # Set the height of the titlebar, can't do it if pack is not desactivate
 
-        self.floating_panel_title_label = tk.Label(
+        self.floating_panel_title_label = ttk.Label(
             self.floating_panel_titlebar,
             text="Floating Panel",
-            bg="#1d1d1d",
-            fg="white",
         )
         self.floating_panel_title_label.pack(side=tk.LEFT, padx=5)
         """
@@ -464,12 +182,12 @@ class GUI(tk.Frame):
         self.floating_panel_toggle_button.pack(side=tk.RIGHT)"""
 
         # Content inside the panel
-        self.floating_panel_content = tk.Frame(self.floating_panel, bg="#262626")
+        self.floating_panel_content = ttk.Frame(self.floating_panel)
         self.floating_panel_content.pack(expand=True, fill=tk.BOTH)
 
         # Titlebar / Panel content separator
-        self.separator_cpc = tk.Frame(
-            self.floating_panel_content, bg="#EEB604", height="2"
+        self.separator_cpc = ttk.Frame(
+            self.floating_panel_content, style="primary.TFrame", height="2"
         )
         self.separator_cpc.pack(side="top", fill="x")
 
@@ -484,23 +202,18 @@ class GUI(tk.Frame):
         )
         self.floating_panel_text_widget.pack(padx=10, pady=10)
 
+        """ Old config
         # Create a list of Entry widgets to edit coordinates
-        self.entry_widgets = []
+        self.entry_widgets = []"""
 
         # Create a list of Checkbox var to delete points
         self.checkbox_del_widgets = []
 
         # Export & delete buttons
-        tk.Button(
+        ttk.Button(
             self.floating_panel_content,
             text="Delete point(s)",
             command=self.delete_point,
-            bg="#3b3b3b",
-            fg="white",
-            activebackground="#4b4b4b",
-            activeforeground="white",
-            relief=tk.FLAT,
-            overrelief=tk.FLAT,
         ).pack(padx=10, pady=10)
         # Old config:
         """tk.Button(
@@ -566,11 +279,15 @@ class GUI(tk.Frame):
                 if file_extension == ".json":
                     trajectory_manager.coordinates_to_json(
                         self.image_points,
+                        self.actions,
                         file_path,
                         self.angle.get(),
                         self.orientation.get(),
                         self.direction.get(),
+                        self.action.get(),
                     )
+                    self.save_config("last_opened_trajectory", file_path)
+
                 elif file_extension == ".csv":
                     trajectory_manager.coordinates_to_csv(
                         self.image_points,
@@ -578,38 +295,51 @@ class GUI(tk.Frame):
                         self.angle.get(),
                         self.orientation.get(),
                         self.direction.get(),
+                        self.action.get(),
                     )
                 else:
                     messagebox.showerror("Unsupported File", "File type not supported.")
             except Exception as e:
                 messagebox.showerror("Error", f"Error saving file: {e}")
 
-    def load_file(self, event=None):
+    def load_file(self, event=None, file_path=None):
         # Load the trajectory file chosen by the user
-        file_path = filedialog.askopenfilename(
-            filetypes=[
-                ("JSON & CSV", ".json .csv"),
-                ("JSON", ".json"),
-                ("CSV", ".csv"),
-            ],
-            initialdir=os.getcwd(),  # Current directory
-        )
+
+        if file_path is None:
+            file_path = filedialog.askopenfilename(
+                filetypes=[
+                    ("JSON & CSV", ".json .csv"),
+                    ("JSON", ".json"),
+                    ("CSV", ".csv"),
+                ],
+                initialdir=os.getcwd(),  # Current directory
+            )
 
         if file_path:
             file_extension = os.path.splitext(file_path)[-1].lower()
             try:
                 if file_extension == ".json":
-                    self.image_points = trajectory_manager.json_to_coordinates(
-                        file_path
-                    )
+                    loaded_content = trajectory_manager.json_to_coordinates(file_path)
+                    if loaded_content is not None:
+                        self.image_points, self.actions = (
+                            loaded_content[0],
+                            loaded_content[1],
+                        )
+
+                    else:
+                        return
+
                     self.update_fp()
                     self.redraw_image()
+
                 elif file_extension == ".csv":
                     self.image_points = trajectory_manager.csv_to_coordinates(file_path)
                     self.update_fp()
                     self.redraw_image()
+
                 else:
                     messagebox.showerror("Unsupported File", "File type not supported.")
+
             except Exception as e:
                 messagebox.showerror("Error", f"Error loading file: {e}")
 
@@ -679,8 +409,7 @@ class GUI(tk.Frame):
             self.previous_cs = self.coordinate_system.get()
             self.save_config("coordinate_system", self.coordinate_system.get())
             self.redraw_image()
-            print(self.previous_cs)
-            print(type(self.coordinate_system.get()))
+
         elif self.previous_cs != self.coordinate_system.get():
             self.coordinate_system.set(self.previous_cs)
 
@@ -700,6 +429,12 @@ class GUI(tk.Frame):
         self.save_config("direction", self.direction.get())
         self.update_fp()
 
+    def wrapper_action(self):
+        """Wrapper to save the action value in the CONFIG_FILE and update_fp"""
+
+        self.save_config("action", self.action.get())
+        self.update_fp()
+
     # -------------------------------------------------------------------------------
     # Define mouse & keyboard event
     # -------------------------------------------------------------------------------
@@ -708,9 +443,9 @@ class GUI(tk.Frame):
         # Right mouse button pressed / set the current coordinates to move the image
         self.__old_event = event
 
-    def delete_point(self, event=None):
+    def delete_point(self, event=None, selection_mode=False):
         # Middle right mouse button pressed / delete latest point
-        if event == None:
+        if event is None:
             points_to_pop = [
                 i
                 for i, checkbox_value in enumerate(self.checkbox_del_widgets)
@@ -722,11 +457,42 @@ class GUI(tk.Frame):
                 self.image_points.pop(index)
                 self.update_fp()  # Update the content of the floating panel
                 self.redraw_image()  # Update the canvas
+
         else:
-            if self.image_points:
+            if self.image_points and self.selected_point_idx is not None:
+                self.image_points.pop(self.selected_point_idx)
+                self.selected_point_idx = None
+                self.update_fp()
+                self.redraw_image()
+
+            elif self.image_points and selection_mode is False:
                 self.image_points.pop()  # Remove the last point
                 self.update_fp()  # Update the content of the floating panel
                 self.redraw_image()  # Update the canvas
+
+    def select_point(self, event):
+        selection_radius = 30
+
+        self.selected_point_idx = None
+
+        if self.image_points is not None:
+            for idx, point in enumerate(self.image_points):
+                x, y = point[0], point[1]
+                image_point = self.to_image_point(event.x, event.y)
+                if image_point is not None:
+                    x_clicked, y_cliked = image_point[0], image_point[1]
+                else:
+                    return
+
+                distance = math.sqrt((x_clicked - x) ** 2 + (y_cliked - y) ** 2)
+
+                if distance <= selection_radius:
+                    if self.min_distance is None or distance < self.min_distance:
+                        self.min_distance = distance
+                        self.selected_point_idx = idx
+
+            self.redraw_image()
+            self.min_distance = None
 
     """ Old config
     def create_point(self, event=None):
@@ -770,7 +536,14 @@ class GUI(tk.Frame):
         preview_point_coords = self.to_image_point(event.x, event.y)
         if preview_point_coords is not None:
             self.preview_point_coords = [
-                [preview_point_coords[0], preview_point_coords[1], None, None, None]
+                [
+                    preview_point_coords[0],
+                    preview_point_coords[1],
+                    None,
+                    None,
+                    None,
+                    None,
+                ]
             ]
             self.preview_point_coords = trajectory_manager.coordinates_to_float64(
                 self.preview_point_coords
@@ -782,11 +555,17 @@ class GUI(tk.Frame):
         self.image_points = trajectory_manager.calculate_angle(self.image_points)
         self.preview_mode = False
         self.preview_point_coords = None
+        self.master.unbind("<Button-1>", self.select_point_bind)
         self.update_fp()
         self.redraw_image()
         self.canvas.unbind("<Motion>", self.preview_motion_bind)
         self.canvas.unbind("<Button-1>", self.preview_button_bind)
         self.master.unbind("<Escape>", self.preview_escape_bind)
+        self.select_point_bind = self.master.bind("<Button-1>", self.select_point)
+        self.master.bind(
+            "<Escape>",
+            lambda event, selection_mode=True: self.delete_point(event, selection_mode),
+        )
         return
 
     def leave_preview(self, event):
@@ -797,6 +576,10 @@ class GUI(tk.Frame):
         self.canvas.unbind("<Motion>", self.preview_motion_bind)
         self.canvas.unbind("<Button-1>", self.preview_button_bind)
         self.canvas.unbind("<Escape>", self.preview_escape_bind)
+        self.master.bind(
+            "<Escape>",
+            lambda event, selection_mode=True: self.delete_point(event, selection_mode),
+        )
         return
 
     def move_image(self, event):
@@ -941,11 +724,13 @@ class GUI(tk.Frame):
         # Update the floating panel text widget with the current list of coordinates
         # Clear current content
         self.checkbox_del_widgets.clear()
-        self.entry_widgets.clear()
+        # self.entry_widgets.clear()
         self.floating_panel_text_widget.delete(1.0, tk.END)
 
         # Insert updated coordinates
-        for i, (x, y, angle, orientation, direction) in enumerate(self.image_points):
+        for i, (x, y, angle, orientation, direction, action) in enumerate(
+            self.image_points
+        ):
             if i == 0:
                 self.floating_panel_text_widget.insert(tk.END, "Point 1:    ")
             else:
@@ -972,37 +757,45 @@ class GUI(tk.Frame):
             self.floating_panel_text_widget.insert(tk.END, "\n   x: ")
 
             # Create Entry widgets for x and y values
+            x_string = StringVar()
             x_entry = tk.Entry(
                 self.floating_panel_text_widget,
                 width=5,
                 bg="#4b4b4b",
                 fg="white",
                 relief=tk.FLAT,
+                textvariable=x_string,
             )
             x_entry.insert(
-                0, format(x, ".0f")
+                0, format(x, ".0f") if x else ""
             )  # Set the initial value to the current x rounded
-            x_entry.bind(
-                "<FocusOut>",
-                lambda event, idx=i: self.wrapper_update_coordinate(event, idx),
+            x_string.trace_add(
+                "write",
+                lambda *args, new_x=x_string, idx=i: self.coordinate_entry_change(
+                    new_x=new_x.get(), idx=idx
+                ),
             )
-            self.entry_widgets.append(x_entry)
+            # self.entry_widgets.append(x_entry)
 
+            y_string = StringVar()
             y_entry = tk.Entry(
                 self.floating_panel_text_widget,
                 width=5,
                 bg="#4b4b4b",
                 fg="white",
                 relief=tk.FLAT,
+                textvariable=y_string,
             )
             y_entry.insert(
-                0, format(y, ".0f")
+                0, format(y, ".0f") if y else ""
             )  # Set the initial value to the current y rounded
-            y_entry.bind(
-                "<FocusOut>",
-                lambda event, idx=i: self.wrapper_update_coordinate(event, idx),
+            y_string.trace_add(
+                "write",
+                lambda *args, new_y=y_string, idx=i: self.coordinate_entry_change(
+                    new_y=new_y.get(), idx=idx
+                ),
             )
-            self.entry_widgets.append(y_entry)
+            # self.entry_widgets.append(y_entry)
 
             # Add the Entry widget (x, y and orientation), direction drop-down menu and the angle to the Text widget
             self.floating_panel_text_widget.window_create(tk.END, window=x_entry)
@@ -1011,50 +804,107 @@ class GUI(tk.Frame):
             )  # Separates x and y
             self.floating_panel_text_widget.window_create(tk.END, window=y_entry)
 
-            if self.orientation.get() == "true":
+            if self.orientation.get():
+                orientation_string = StringVar()
                 orientation_entry = tk.Entry(
                     self.floating_panel_text_widget,
                     width=5,
                     bg="#4b4b4b",
                     fg="white",
                     relief=tk.FLAT,
+                    textvariable=orientation_string,
                 )
-                orientation_entry.bind(
-                    "<FocusOut>",
-                    lambda event, idx=i: self.wrapper_update_orientation(event, idx),
+                orientation_string.trace_add(
+                    "write",
+                    lambda *args,
+                    new_orientation=orientation_string,
+                    idx=i: self.orientation_entry_change(new_orientation.get(), idx),
                 )
                 orientation_entry.insert(
                     0, format(orientation, ".0f") if orientation else ""
                 )  # Set the initial orientation, empty if not set
 
-                self.entry_widgets.append(orientation_entry)
+                # self.entry_widgets.append(orientation_entry)
                 self.floating_panel_text_widget.insert(tk.END, "\n   orientation: ")
                 self.floating_panel_text_widget.window_create(
                     tk.END, window=orientation_entry
                 )
-            if self.direction.get() == "true":
+
+            if self.direction.get():
+                direction_string = StringVar()
                 direction_entry = tk.Entry(
                     self.floating_panel_text_widget,
                     width=5,
                     bg="#4b4b4b",
                     fg="white",
                     relief=tk.FLAT,
+                    textvariable=direction_string,
                 )
+                direction_string.trace_add(
+                    "write",
+                    lambda *args,
+                    new_direction=direction_string,
+                    idx=i: self.direction_entry_change(new_direction.get(), idx),
+                )
+                """Old config
                 direction_entry.bind(
                     "<FocusOut>",
                     lambda event, idx=i: self.wrapper_update_direction(event, idx),
-                )
+                )"""
                 direction_entry.insert(
                     0, direction if direction else ""
                 )  # Set the initial direction, empty if not set
 
-                self.entry_widgets.append(direction_entry)
+                # self.entry_widgets.append(direction_entry)
                 self.floating_panel_text_widget.insert(tk.END, "\n   direction: ")
                 self.floating_panel_text_widget.window_create(
                     tk.END, window=direction_entry
                 )
 
-            if self.angle.get() == "true":
+            if self.action.get():
+                action_menubutton = ttk.Menubutton(
+                    self.floating_panel_text_widget,
+                    text="Choose action",
+                )
+                action_menu = tk.Menu(
+                    action_menubutton,
+                )
+                action_menubutton.configure(menu=action_menu)
+
+                choices = {}
+
+                for action in self.actions:
+                    if self.image_points is None:
+                        return
+
+                    if (
+                        self.image_points[i][5] is not None
+                        and action in self.image_points[i][5]
+                    ):
+                        choices[action] = tk.IntVar(value=1)
+                        label = (
+                            f"({self.image_points[i][5].index(action) + 1}): {action}"
+                        )
+
+                    else:
+                        choices[action] = tk.IntVar(value=0)
+                        label = action
+
+                    action_menu.add_checkbutton(
+                        label=label,
+                        variable=choices[action],
+                        onvalue=1,
+                        offvalue=0,
+                        command=lambda new_choices=choices,
+                        idx=i: self.action_checkbutton_change(new_choices, idx),
+                    )
+
+                self.floating_panel_text_widget.insert(tk.END, "\n   action(s): ")
+                self.floating_panel_text_widget.window_create(
+                    tk.END, window=action_menubutton
+                )
+
+            if self.angle.get():
                 angle_output = (
                     f"\n   angle: {format(angle, '.0f')}°" if angle is not None else ""
                 )
@@ -1064,24 +914,38 @@ class GUI(tk.Frame):
                 tk.END, "\n"
             )  # Newline after each Point
 
-    def wrapper_update_coordinate(self, event, idx: int):
-        new_x, new_y = (
-            self.entry_widgets[4 * idx].get(),
-            self.entry_widgets[4 * idx + 1].get(),
+    def coordinate_entry_change(self, new_x=None, new_y=None, idx: int = -1):
+        """Update the x or y coordinate based on the content of the x_entry and the y_entry widgets"""
+
+        new_coordinate = (
+            [0, new_x]
+            if new_x is not None
+            else ([1, new_y] if new_y is not None else None)
         )
 
-        try:
-            new_x, new_y = (
-                np.float64(new_x),
-                np.float64(new_y),
+        if idx == -1 or new_coordinate is None:
+            return
+
+        if new_coordinate[1] == "":
+            self.image_points = trajectory_manager.update_trajectory(
+                self.image_points, idx, new_coordinate[0], new_coordinate[1]
             )
-        except Exception as e:
-            messagebox.showerror("Error", "Coordinates must be number")
             self.update_fp()
             return
 
-        if not (0 <= new_x <= self.pil_image.width) or not (
-            0 <= new_y <= self.pil_image.height
+        try:
+            new_coordinate[1] = np.float64(new_coordinate[1])
+        except Exception as e:
+            messagebox.showerror("Error", "New coordinate must be number")
+            self.update_fp()
+            return
+
+        if (
+            new_coordinate[0] == 0
+            and not (0 <= new_coordinate[1] <= self.pil_image.width)
+        ) or (
+            new_coordinate[0] == 1
+            and not (0 <= new_coordinate[1] <= self.pil_image.height)
         ):
             messagebox.showerror(
                 "Error", "Coordinates cannot be outside the dimensions of the image"
@@ -1089,18 +953,23 @@ class GUI(tk.Frame):
             self.update_fp()
             return
 
-        if not (isinstance(new_x, np.float64) or isinstance(new_y, np.float64)):
+        if not isinstance(new_coordinate[1], np.float64):
             return
 
         self.image_points = trajectory_manager.update_trajectory(
-            idx, self.image_points, [0, 1], [new_x, new_y]
+            self.image_points, idx, new_coordinate[0], new_coordinate[1]
         )
+
         self.redraw_image()
 
-    def wrapper_update_orientation(self, event, idx):
+    def orientation_entry_change(self, new_orientation, idx: int):
         """Update the orientation based on the content of the orientation entry widget"""
 
-        new_orientation = self.entry_widgets[4 * idx + 2].get()
+        if new_orientation == "" or new_orientation == "-":
+            self.image_points = trajectory_manager.update_trajectory(
+                self.image_points, idx, 3, None
+            )
+            return
 
         try:
             new_orientation = float(new_orientation)
@@ -1117,20 +986,65 @@ class GUI(tk.Frame):
             return
 
         self.image_points = trajectory_manager.update_trajectory(
-            idx, self.image_points, [3], [new_orientation]
+            self.image_points, idx, 3, new_orientation
+        )
+        # self.redraw_image()
+
+    def direction_entry_change(self, new_direction, idx):
+        """Update the direction based on the content of the orientation entry widget"""
+
+        self.image_points = trajectory_manager.update_trajectory(
+            self.image_points, idx, 4, new_direction
         )
         self.redraw_image()
 
-    def wrapper_update_direction(self, event, idx):
-        """Update the direction based on the content of the orientation entry widget"""
+    def action_checkbutton_change(self, choices: dict, idx: int = -1):
+        """Update the actions of a point based on the content of checkbutton widget"""
 
-        new_direction = self.entry_widgets[4 * idx + 3].get()
-        print(new_direction)
+        if self.image_points is None:
+            return
+        current_actions = self.image_points[idx][5]
 
-        self.image_points = trajectory_manager.update_trajectory(
-            idx, self.image_points, [4], [new_direction]
-        )
-        print(self.image_points)
+        for name, var in choices.items():
+            if current_actions is None:
+                current_actions = []
+
+            if var.get() == 1:
+                if name not in current_actions:
+                    current_actions.append(name)
+                    new_actions = current_actions
+                    self.image_points = trajectory_manager.update_trajectory(
+                        self.image_points, idx, 5, new_actions
+                    )
+                    self.update_fp()
+
+            elif var.get() == 0:
+                if name in current_actions:
+                    current_actions.remove(name)
+                    new_actions = current_actions
+                    if len(new_actions) == 0:
+                        new_actions = None
+                    self.image_points = trajectory_manager.update_trajectory(
+                        self.image_points, idx, 5, new_actions
+                    )
+                    self.update_fp()
+
+    def toggle_symmetry(self):
+        """Change the symmetry based on the value of the checkbutton from the trajectory menu"""
+        if self.image_points is None:
+            return
+
+        for idx, point in enumerate(self.image_points):
+            old_x = point[0]
+            new_x = np.float64(self.pil_image.width - old_x)
+            if isinstance(new_x, np.float64):
+                self.image_points = trajectory_manager.update_trajectory(
+                    self.image_points, idx, 0, new_x
+                )
+            else:
+                return
+
+        self.update_fp()
         self.redraw_image()
 
     # -------------------------------------------------------------------------------
@@ -1334,7 +1248,7 @@ class GUI(tk.Frame):
             index = len(self.image_points)
             preview_point_coords = [
                 self.to_canvas_point(x, y)
-                for x, y, _, _, _ in self.preview_point_coords
+                for x, y, _, _, _, _ in self.preview_point_coords
             ]
             for x, y in preview_point_coords:
                 self.canvas.create_oval(
@@ -1354,7 +1268,7 @@ class GUI(tk.Frame):
         if len(self.image_points) > 0:
             # Convert all image points to canvas points
             canvas_points = [
-                self.to_canvas_point(x, y) for x, y, _, _, _ in self.image_points
+                self.to_canvas_point(x, y) for x, y, _, _, _, _ in self.image_points
             ]
             # Draw lines
             for i in range(len(canvas_points) - 1):
@@ -1364,15 +1278,26 @@ class GUI(tk.Frame):
 
             # Draw points
             for index, (x, y) in enumerate(canvas_points):
-                point = self.canvas.create_oval(
-                    x - 7,
-                    y - 7,
-                    x + 7,
-                    y + 7,
-                    fill="white",
-                    outline="black",
-                    tags=("point",),
-                )
+                if index == self.selected_point_idx:
+                    self.canvas.create_oval(
+                        x - 7,
+                        y - 7,
+                        x + 7,
+                        y + 7,
+                        fill="red",
+                        outline="black",
+                        tags=("point",),
+                    )
+                else:
+                    self.canvas.create_oval(
+                        x - 7,
+                        y - 7,
+                        x + 7,
+                        y + 7,
+                        fill="white",
+                        outline="black",
+                        tags=("point",),
+                    )
                 self.canvas.create_text(
                     x, y, text=str(index + 1), fill="black", font=("Helvetica", 9)
                 )

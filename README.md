@@ -7,7 +7,7 @@ A tkinter application that renders a chosen image and can be used to draw trajec
 ## Features
 
 - Create custom trajectory over an image
-- Import & export trajectory to .json or .csv
+- Import & export trajectory to .json or .csv (csv not working yet)
 - 2 coordinates system
 - Render .jpg, .png, .bmp and .tif image
 
@@ -17,14 +17,15 @@ A tkinter application that renders a chosen image and can be used to draw trajec
 - **uv**: A project manager for python that will be used to manage Trajectory Picker. [Github](https://github.com/astral-sh/uv)
 - **Libraries/Dependencies** (Don't worry they will be installed by uv :D):
   - numpy (>=2.3.1)
-  - pillow (>=11.2.1)
+  - pillow (<11)
+  - ttkbootstrap (>=1.14.1)
 
 ## Installation
 
 ### 1. Clone the repository
 
 ```bash
-https://github.com/Brasseur2robot/Trajectory-Picker.git
+git clone https://github.com/Brasseur2robot/Trajectory-Picker.git
 cd Trajectory-Picker
 ```
 

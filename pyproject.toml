@@ -1,10 +1,11 @@
 [project]
 name = "trajectoryPicker"
-version = "1.1.0"
+version = "1.2.0"
 description = "A tkinter application that renders a chosen image and can be used to draw trajectory overs"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "numpy>=2.3.1",
-    "pillow>=11.2.1",
+    "pillow<11",
+    "ttkbootstrap>=1.14.1",
 ]
