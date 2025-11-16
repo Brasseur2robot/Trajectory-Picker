@@ -2,7 +2,11 @@ import tkinter as tk
 
 
 def create_default_shortcuts(self):
-    """Create all shortcuts for master and menu bar"""
+    """Create all shortcuts for master and menu bar
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
 
     #############
     #   Mouse   #
@@ -81,10 +85,10 @@ def create_default_shortcuts(self):
     self.master.bind("<Control-l>", lambda event: self.rotate_image(-5.0))
 
     #
-    # Leave selection mode / escape
+    # Delete selected point
     #
     self.master.bind(
-        "<Escape>",
+        "<Delete>",
         lambda event, selection_mode=True: self.delete_point(event, selection_mode),
     )
 
@@ -103,7 +107,10 @@ def create_default_shortcuts(self):
     #
     # Save current trajectory to a file / control + s
     #
-    self.menu_bar.bind_all("<Control-s>", self.save_file)
+    self.menu_bar.bind_all(
+        "<Control-s>",
+        lambda event=None, data_type="trajectory": self.save_file(event, data_type),
+    )
 
     #
     # Close the app / control + q
@@ -114,3 +121,8 @@ def create_default_shortcuts(self):
     # Close or open the actions_panel / control + a
     #
     self.menu_bar.bind_all("<Control-a>", self.toggle_actions_panel)
+
+    #
+    # Close or open the actions_panel / control + a
+    #
+    self.menu_bar.bind_all("<Control-e>", self.toggle_trajectory_panel)

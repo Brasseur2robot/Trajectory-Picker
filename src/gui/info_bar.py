@@ -3,7 +3,11 @@ from tkinter import ttk
 
 
 def create_info_bar(self):
-    """Create the info bar and his"""
+    """Create the info_bar that is displayed under the canvas
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
 
     frame_statusbar = ttk.Frame(self.master)
     self.label_image_info = tk.Label(

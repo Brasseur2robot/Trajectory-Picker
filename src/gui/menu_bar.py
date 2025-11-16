@@ -2,23 +2,17 @@ import tkinter as tk
 
 
 def create_menu_bar(self):
-    """Create all Menu and Sub-menu with their shortcuts"""
+    """Create all Menu and Sub-menu with their shortcuts
 
-    #############
-    #   Menus   #
-    #############
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
 
     #
     # Menu bar
     #
     self.menu_bar = tk.Menu(
         self,
-        # Old config  for all tk.Manu (not useful with ttkbootstrap):
-        # bg="#1d1d1d",
-        # fg="#ffffff",
-        # activebackground="#eeb604",
-        # bd=0,
-        # relief=tk.FLAT,
     )  # Create menu_bar instance from Menu class
 
     #
@@ -36,12 +30,20 @@ def create_menu_bar(self):
 
     # Open trajectory
     self.file_menu.add_command(
-        label="Open trajectory", command=self.load_file, accelerator="Ctrl + T"
+        label="Open trajectory",
+        command=lambda content_type="trajectory": self.load_file(
+            content_type=content_type
+        ),
+        accelerator="Ctrl + T",
     )
 
     # Save trajectory
     self.file_menu.add_command(
-        label="Save trajectory", command=self.save_file, accelerator="Ctrl + S"
+        label="Save trajectory",
+        command=lambda event=None, data_type="trajectory": self.save_file(
+            event, data_type
+        ),
+        accelerator="Ctrl + S",
     )
 
     self.file_menu.add_separator()
@@ -50,19 +52,6 @@ def create_menu_bar(self):
     self.file_menu.add_command(
         label="Exit", command=self.menu_quit_clicked, accelerator="Ctrl + Q"
     )
-
-    #
-    # Floating panel menu
-    #
-    self.fp_menu = tk.Menu(
-        self.menu_bar,
-    )
-    self.menu_bar.add_cascade(label="Floating panel", menu=self.fp_menu)
-
-    self.fp_menu.add_command(label="Open", command=self.toggle_panel_open)
-    # Old config:
-    # self.fp_menu.add_command(label="Resize", command=self.toggle_panel_size)
-    self.fp_menu.add_command(label="Close", command=self.toggle_panel_close)
 
     #
     # Image menu
@@ -124,14 +113,20 @@ def create_menu_bar(self):
         label="Top left",
         variable=self.coordinate_system,
         value="top-left",
-        command=lambda: self.wrapper_coordinate_system(),
+        command=lambda option_name="coordinate_system",
+        option_tk_var=self.coordinate_system: self.wrapper_options(
+            option_name, option_tk_var
+        ),
     )
 
     self.cs_sub_menu.add_radiobutton(
         label="Bottom left",
         variable=self.coordinate_system,
         value="bottom-left",
-        command=lambda: self.wrapper_coordinate_system(),
+        command=lambda option_name="coordinate_system",
+        option_tk_var=self.coordinate_system: self.wrapper_options(
+            option_name, option_tk_var
+        ),
     )
 
     #
@@ -149,7 +144,8 @@ def create_menu_bar(self):
         variable=self.angle,
         onvalue=1,
         offvalue=0,
-        command=lambda: self.wrapper_angle(),
+        command=lambda option_name="angle",
+        option_tk_var=self.angle: self.wrapper_options(option_name, option_tk_var),
     )
     # Old config:
     # self.angle_sub_menu = tk.Menu(
@@ -180,7 +176,10 @@ def create_menu_bar(self):
         variable=self.orientation,
         onvalue=1,
         offvalue=0,
-        command=lambda: self.wrapper_orientation(),
+        command=lambda option_name="orientation",
+        option_tk_var=self.orientation: self.wrapper_options(
+            option_name, option_tk_var
+        ),
     )
 
     #
@@ -191,19 +190,34 @@ def create_menu_bar(self):
         variable=self.direction,
         onvalue=1,
         offvalue=0,
-        command=lambda: self.wrapper_direction(),
+        command=lambda option_name="direction",
+        option_tk_var=self.direction: self.wrapper_options(option_name, option_tk_var),
     )
 
     #
-    # Action checkbutton
+    # Actions checkbutton sub-menu
     #
-    self.trajectory_menu.add_checkbutton(
-        label="Action",
+    self.action_sub_menu = tk.Menu(
+        self.trajectory_menu,
+    )
+    self.trajectory_menu.add_cascade(label="Actions", menu=self.action_sub_menu)
+
+    # Actions checkbutton
+    self.action_sub_menu.add_checkbutton(
+        label="Actions",
         variable=self.action,
         onvalue=1,
         offvalue=0,
-        command=lambda: self.wrapper_action(),
+        command=lambda option_name="action",
+        option_tk_var=self.action: self.wrapper_options(option_name, option_tk_var),
     )
+
+    if self.action.get():
+        self.toggle_wea_checkbutton(True)
+        self.toggle_export_action_checkbutton(True)
+
+        if self.export_action.get():
+            self.toggle_export_action_command(True)
 
     #
     # Other commands
@@ -214,6 +228,13 @@ def create_menu_bar(self):
         label="Edit actions",
         command=self.toggle_actions_panel,
         accelerator="Control + A",
+    )
+
+    # Edit the trajectory
+    self.trajectory_menu.add_command(
+        label="Edit trajectory",
+        command=self.toggle_trajectory_panel,
+        accelerator="Control + E",
     )
 
     # Add a new point
@@ -242,8 +263,80 @@ def create_menu_bar(self):
     )
     self.menu_bar.add_cascade(label="Options & help", menu=self.options_menu)"""
 
-    ###############
-    # Arrangement #
-    ###############
-
+    # Add the menu bar to the main window
     self.master.config(menu=self.menu_bar)
+
+
+def toggle_wea_checkbutton(self, toggle_int: int) -> None:
+    """Create the wea_checkbutton or delete it
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if the checkbutton should be displayed or not
+    """
+
+    if toggle_int:
+        self.action_sub_menu.add_checkbutton(
+            label="Wait end of action",
+            variable=self.wea,
+            onvalue=1,
+            offvalue=0,
+            command=lambda option_name="wea",
+            option_tk_var=self.wea: self.wrapper_options(option_name, option_tk_var),
+        )
+
+    else:
+        self.action_sub_menu.delete(1)
+
+
+def toggle_export_action_checkbutton(self, toggle_int: int) -> None:
+    """Create the export_action_checkbutton or delete it
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if the checkbutton should be displayed or not
+    """
+
+    if toggle_int:
+        self.action_sub_menu.add_checkbutton(
+            label="Export action in json",
+            variable=self.export_action,
+            onvalue=1,
+            offvalue=0,
+            command=lambda option_name="export_action",
+            option_tk_var=self.export_action: self.wrapper_options(
+                option_name, option_tk_var
+            ),
+        )
+
+    else:
+        self.action_sub_menu.delete(1)
+
+
+def toggle_export_action_command(self, toggle_int: int) -> None:
+    """Create the two commands for export_action_command or delete it
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if action command should be displayed or not
+    """
+
+    if toggle_int:
+        self.file_menu.insert_command(
+            3,
+            label="Open actions",
+            command=lambda content_type="actions": self.load_file(
+                content_type=content_type
+            ),
+        )
+        self.file_menu.insert_command(
+            4,
+            label="Save actions",
+            command=lambda event=None, data_type="actions": self.save_file(
+                event, data_type
+            ),
+        )
+
+    else:
+        self.file_menu.delete(4)
+        self.file_menu.delete(3)

@@ -5,8 +5,13 @@ MIN_HEIGHT = 300
 MIN_WIDTH = 300
 
 
-def toggle_actions_panel(self, event=None):
-    """Create or delete the actions_panel depending if it exist"""
+def toggle_actions_panel(self, event=None) -> None:
+    """Create or delete the actions_panel depending if it exist
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        event (event): set to None here because not used
+    """
 
     # Create the panel if it don't exist
     if self.actions_panel is None or not self.actions_panel.winfo_exists():
@@ -15,8 +20,8 @@ def toggle_actions_panel(self, event=None):
 
         self.actions_panel.title("Actions panel")
         self.actions_panel.overrideredirect(True)
+        self.actions_panel.geometry(f"{MIN_WIDTH}x{MIN_HEIGHT}")
         self.actions_panel.minsize(height=MIN_HEIGHT, width=MIN_WIDTH)
-        self.actions_panel.configure(bg="#262626")
 
         # Main frame (everything is inside it)
         main_frame = ttk.Frame(self.actions_panel)
@@ -29,11 +34,11 @@ def toggle_actions_panel(self, event=None):
         titlebar_frame.pack_propagate(False)  # Disable resizing based on child widgets
         titlebar_frame.config(height=20)
 
-        title_label = ttk.Label(
+        titlebar_label = ttk.Label(
             titlebar_frame,
             text="Actions Panel",
         )
-        title_label.pack(side=tk.LEFT, padx=5)
+        titlebar_label.pack(side=tk.LEFT, padx=5)
 
         # Titlebar / content separator
         separator_frame = ttk.Frame(main_frame, style="primary.TFrame", height=2)
@@ -52,22 +57,33 @@ def toggle_actions_panel(self, event=None):
         scroll_frame.grid(row=0, column=0, sticky="nsew")
 
         # Creating a canvas to use ttk.Scrollbar inside
-        canvas = tk.Canvas(scroll_frame)
-        canvas.pack(side="left", fill="both", expand=True)
+        self.actions_form_canvas = tk.Canvas(scroll_frame)
+        self.actions_form_canvas.pack(side="left", fill="both", expand=True)
 
         # Scrollbar
-        scrollbar = ttk.Scrollbar(scroll_frame, orient="vertical", command=canvas.yview)
+        scrollbar = ttk.Scrollbar(
+            scroll_frame, orient="vertical", command=self.actions_form_canvas.yview
+        )
         scrollbar.pack(side="right", fill="y")
 
         # Linking the scrollbar to the canvas
-        canvas.configure(yscrollcommand=scrollbar.set)
-        canvas.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        self.actions_form_canvas.configure(yscrollcommand=scrollbar.set)
+        self.actions_form_canvas.bind(
+            "<Configure>",
+            lambda event: self.actions_form_canvas.configure(
+                scrollregion=self.actions_form_canvas.bbox("all")
+            ),
         )
 
         # Function and binding to use the mousewheel for scrolling
-        canvas.bind_all("<Button-4>", lambda e: canvas.yview_scroll(-1, "units"))
-        canvas.bind_all("<Button-5>", lambda e: canvas.yview_scroll(1, "units"))
+        self.actions_panel.bind(
+            "<Button-4>",
+            lambda event: self.actions_form_canvas.yview_scroll(-1, "units"),
+        )
+        self.actions_panel.bind(
+            "<Button-5>",
+            lambda event: self.actions_form_canvas.yview_scroll(1, "units"),
+        )
 
         # Need to be tested for windows
         # def _on_mousewheel(event):
@@ -76,8 +92,10 @@ def toggle_actions_panel(self, event=None):
         # canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
         # Content inside the canvas where the labels and entries will be displayed
-        self.form_frame = ttk.Frame(canvas)
-        canvas.create_window((0, 0), window=self.form_frame, anchor="nw")
+        self.actions_form_frame = ttk.Frame(self.actions_form_canvas)
+        self.actions_form_canvas.create_window(
+            (0, 0), window=self.actions_form_frame, anchor="nw"
+        )
 
         # Create the form for each actions that already exist + 1 that is empty
         self.actions_form = []
@@ -103,8 +121,13 @@ def toggle_actions_panel(self, event=None):
         self.actions_panel.destroy()
 
 
-def _remove_form(self, event=None):
-    """Remove the action from the cleared form and recreate all form from the actions list"""
+def _remove_form(self, event=None) -> None:
+    """Remove the action from the cleared form and recreate all form from the actions list
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        event (event): set to None here because not used
+    """
 
     index_to_del = None
 
@@ -129,11 +152,26 @@ def _remove_form(self, event=None):
             else:
                 _create_form(self, self.actions[i], i)
 
-        self.update_fp()
+        # Without the following the freshly created items aren't displayed inside the scrollregion if there is too much widget
+        self.actions_panel.update_idletasks()  # Ensure every widget are displayed before the next command
+        self.actions_form_canvas.configure(
+            scrollregion=self.actions_form_canvas.bbox(
+                "all"
+            )  # Update the scrollregion to display all widgets
+        )
+
+        # Load the edited actions list inside the trajectory_panel
+        self.update_trajectory_panel_content()
 
 
-def _entry_change(self, new_action: str, action_index: int):
-    """Edit an already existing action or create append a new action and create a new form"""
+def _entry_change(self, new_action: str, action_index: int) -> None:
+    """Edit an already existing action or append a new action and create a new form
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        new_action (str): the new value for the new action or the action to update
+        action_index (int): the index of the action that need to be updated
+    """
 
     if new_action != "":
         # Create a new action and a new form if the last form is completed or update the existing action
@@ -141,26 +179,44 @@ def _entry_change(self, new_action: str, action_index: int):
             self.actions.append(new_action)
 
             _create_form(self)
-            self.update_fp()
+
+            # Without the following the freshly created items aren't displayed inside the scrollregion if there is too much widget
+            self.actions_panel.update_idletasks()  # Ensure every widget are displayed before the next command
+            self.actions_form_canvas.configure(
+                scrollregion=self.actions_form_canvas.bbox(
+                    "all"
+                )  # Update the scrollregion to display all widgets
+            )
+
+            # Load the edited actions list inside the trajectory_panel
+            self.update_trajectory_panel_content()
 
         else:
             self.actions[action_index] = new_action
-            self.update_fp()
+
+            # Load the edited actions list inside the trajectory_panel
+            self.update_trajectory_panel_content()
 
 
-def _create_form(self, action=None, action_index: int = -1):
-    """Create a form and insert an action inside if the form previously exist"""
+def _create_form(self, action: str | None = None, action_index: int = -1) -> None:
+    """Create a form and insert an action inside if the form previously exist
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        new_action (str | None): the text to render inside the the entry widget
+        action_index (int): the index that will be used for the update of the action
+    """
 
     # Label to show the action number
     label = ttk.Label(
-        self.form_frame,
+        self.actions_form_frame,
         text=f"Action n°{len(self.actions_form) + 1}:",
     )
     label.grid(row=len(self.actions_form) + 1, column=0, padx=5, pady=5)
 
     # The entry and his StringVar
     string = tk.StringVar()
-    entry = ttk.Entry(self.form_frame, textvariable=string)
+    entry = ttk.Entry(self.actions_form_frame, textvariable=string)
     if action is not None:
         entry.insert(0, action)
     entry.grid(row=len(self.actions_form) + 1, column=1, padx=5, pady=5)
