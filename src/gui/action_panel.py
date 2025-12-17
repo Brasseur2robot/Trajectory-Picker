@@ -5,26 +5,25 @@ MIN_HEIGHT = 300
 MIN_WIDTH = 300
 
 
-def toggle_actions_panel(self, event=None) -> None:
-    """Create or delete the actions_panel depending if it exist
+def toggle_action_panel(self) -> None:
+    """Create or delete the action_panel depending if it exist
 
     Args:
         self (GUI): the GUI object that is manipulated
-        event (event): set to None here because not used
     """
 
     # Create the panel if it don't exist
-    if self.actions_panel is None or not self.actions_panel.winfo_exists():
+    if self.action_panel is None or not self.action_panel.winfo_exists():
         # Panel creation
-        self.actions_panel = tk.Toplevel(self.master)
+        self.action_panel = tk.Toplevel(self.master)
 
-        self.actions_panel.title("Actions panel")
-        self.actions_panel.overrideredirect(True)
-        self.actions_panel.geometry(f"{MIN_WIDTH}x{MIN_HEIGHT}")
-        self.actions_panel.minsize(height=MIN_HEIGHT, width=MIN_WIDTH)
+        self.action_panel.title("Actions panel")
+        self.action_panel.overrideredirect(True)
+        self.action_panel.geometry(f"{MIN_WIDTH}x{MIN_HEIGHT}")
+        self.action_panel.minsize(height=MIN_HEIGHT, width=MIN_WIDTH)
 
         # Main frame (everything is inside it)
-        main_frame = ttk.Frame(self.actions_panel)
+        main_frame = ttk.Frame(self.action_panel)
         main_frame.pack(fill=tk.X)
 
         # Titlebar
@@ -76,11 +75,11 @@ def toggle_actions_panel(self, event=None) -> None:
         )
 
         # Function and binding to use the mousewheel for scrolling
-        self.actions_panel.bind(
+        self.action_panel.bind(
             "<Button-4>",
             lambda event: self.actions_form_canvas.yview_scroll(-1, "units"),
         )
-        self.actions_panel.bind(
+        self.action_panel.bind(
             "<Button-5>",
             lambda event: self.actions_form_canvas.yview_scroll(1, "units"),
         )
@@ -113,12 +112,12 @@ def toggle_actions_panel(self, event=None) -> None:
         ttk.Button(
             button_frame,
             text="Close panel",
-            command=self.actions_panel.destroy,
+            command=self.action_panel.destroy,
         ).pack()
 
     # Delete the panel if it exist
     else:
-        self.actions_panel.destroy()
+        self.action_panel.destroy()
 
 
 def _remove_form(self, event=None) -> None:
@@ -153,7 +152,7 @@ def _remove_form(self, event=None) -> None:
                 _create_form(self, self.actions[i], i)
 
         # Without the following the freshly created items aren't displayed inside the scrollregion if there is too much widget
-        self.actions_panel.update_idletasks()  # Ensure every widget are displayed before the next command
+        self.action_panel.update_idletasks()  # Ensure every widget are displayed before the next command
         self.actions_form_canvas.configure(
             scrollregion=self.actions_form_canvas.bbox(
                 "all"
@@ -181,7 +180,7 @@ def _entry_change(self, new_action: str, action_index: int) -> None:
             _create_form(self)
 
             # Without the following the freshly created items aren't displayed inside the scrollregion if there is too much widget
-            self.actions_panel.update_idletasks()  # Ensure every widget are displayed before the next command
+            self.action_panel.update_idletasks()  # Ensure every widget are displayed before the next command
             self.actions_form_canvas.configure(
                 scrollregion=self.actions_form_canvas.bbox(
                     "all"

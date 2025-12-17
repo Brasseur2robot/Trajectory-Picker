@@ -10,21 +10,61 @@ FIELDS = ["x", "y", "angle", "orientation", "direction", "action", "wea"]
 def coordinates_to_json(
     coordinates: list,
     actions: list,
+    fbd_area: list,
     is_angle: int,
     is_orientation: int,
     is_direction: int,
     is_action: int,
+    is_export_action: int,
     is_wea: int,
+    is_fbd_area: int,
+    is_export_fbd_area: int,
 ):
     # Convert coordinates and add them to a json file
 
     coordinates = coordinates_to_int(coordinates)
 
-    mask = [1, 1, is_angle, is_orientation, is_direction, is_action, is_wea]
+    mask = [
+        1,
+        1,
+        is_angle,
+        is_orientation,
+        is_direction,
+        is_action,
+        is_wea,
+    ]
 
-    if mask[5] and len(actions) > 0:
+    if (
+        is_action
+        and not is_export_action
+        and len(actions) > 0
+        and is_fbd_area
+        and not is_export_fbd_area
+        and len(fbd_area) > 0
+    ):
         json_actions = format_actions_to_json(actions)
-        trajectory = [
+        json_fbd_area = format_fbd_area_to_json(fbd_area)
+        formated_data = [
+            json_actions,
+            json_fbd_area,
+            [
+                dict(
+                    zip(
+                        [field for field, keep in zip(FIELDS, mask) if keep],
+                        [val for val, keep in zip(value, mask) if keep],
+                    )
+                )
+                for value in coordinates
+            ],
+        ]
+        json_data = {
+            "metadata": {"content_type": "trajectory_action_fbd_area"},
+            "data": formated_data,
+        }
+
+    elif is_action and not is_export_action and len(actions) > 0:
+        json_actions = format_actions_to_json(actions)
+        formated_data = [
             json_actions,
             [
                 dict(
@@ -36,9 +76,32 @@ def coordinates_to_json(
                 for value in coordinates
             ],
         ]
+        json_data = {
+            "metadata": {"content_type": "trajectory_action"},
+            "data": formated_data,
+        }
+
+    elif is_fbd_area and not is_export_fbd_area and len(fbd_area) > 0:
+        json_fbd_area = format_fbd_area_to_json(fbd_area)
+        formated_data = [
+            json_fbd_area,
+            [
+                dict(
+                    zip(
+                        [field for field, keep in zip(FIELDS, mask) if keep],
+                        [val for val, keep in zip(value, mask) if keep],
+                    )
+                )
+                for value in coordinates
+            ],
+        ]
+        json_data = {
+            "metadata": {"content_type": "trajectory_fbd_area"},
+            "data": formated_data,
+        }
 
     else:
-        trajectory = [
+        formated_trajectory = [
             dict(
                 zip(
                     [field for field, keep in zip(FIELDS, mask) if keep],
@@ -47,8 +110,12 @@ def coordinates_to_json(
             )
             for value in coordinates
         ]
+        json_data = {
+            "metadata": {"content_type": "trajectory"},
+            "data": formated_trajectory,
+        }
 
-    return trajectory
+    return json_data
 
 
 def format_json_to_trajectory(json_data):
@@ -61,53 +128,9 @@ def format_json_to_trajectory(json_data):
         return trajectory
 
 
-def coordinates_to_csv(
-    coordinates: list,
-    file_path: str,
-    is_angle: str,
-    is_orientation: str,
-    is_direction: str,
-    is_action: str,
-):
-    # Convert coordinates and add them to a csv file
-
-    coordinates = coordinates_to_int(coordinates)
-
-    mask = [
-        True,
-        True,
-        is_angle.lower() == "true",
-        is_orientation.lower() == "true",
-        is_direction.lower() == "true",
-        is_action.lower() == "true",
-    ]
-
-    coordinates = [
-        [val for val, keep in zip(value, mask) if keep] for value in coordinates
-    ]
-
-    with open(file_path, mode="w", newline="") as file:
-        # Create header and add coordinates to a csv file
-        writer = csv.writer(file)
-        writer.writerow(header for header, keep in zip(FIELDS, mask) if keep)
-        writer.writerows(coordinates)
-
-
-def csv_to_coordinates(file_path: str):
-    # Convert the content of a csv file to coordinates array
-    # TODO: import the trajectory depending of the header of the csv
-
-    with open(file_path, newline="", encoding="utf-8") as csv_file:
-        reader = csv.reader(csv_file)
-        next(reader)
-        coordinates = [[None if cell == "" else cell for cell in row] for row in reader]
-        coordinates = coordinates_to_float64(coordinates)
-
-    if coordinates:
-        return coordinates
-
-
-def format_actions_to_json(actions: list[str]) -> dict[str, str]:
+def format_actions_to_json(
+    actions: list[str], is_json_data: bool = False
+) -> dict[str, str]:
     """Convert a list of actions in a list of dict that can be read easily for a json_file
 
     Args:
@@ -124,6 +147,14 @@ def format_actions_to_json(actions: list[str]) -> dict[str, str]:
         )
     )
 
+    if is_json_data:
+        json_data = {
+            "metadata": {"content_type": "action"},
+            "data": json_actions,
+        }
+
+        return json_data
+
     return json_actions
 
 
@@ -131,6 +162,44 @@ def format_json_to_actions(json_data) -> list[str]:
     actions = [action for action in json_data.values()]
 
     return actions
+
+
+def format_fbd_area_to_json(
+    fbd_area: list[list[int, int, int, int, int]], is_json_data: bool = False
+) -> list[dict[str, int]]:
+    """Convert a list of coordinates for the forbiden area in a list of dict that can be read easily for a json_file
+
+    Args:
+        fbd_area (list[list[int, int, int, int, int]]): all fbd_areas to parse to a json readable format
+    """
+
+    keys = ["x1", "y1", "x2", "y2"]
+
+    json_fbd_area = [dict(zip(keys, row[:-1])) for row in fbd_area]
+
+    if is_json_data:
+        json_data = {
+            "metadata": {"content_type": "fbd_area"},
+            "data": json_fbd_area,
+        }
+
+        return json_data
+
+    return json_fbd_area
+
+
+def format_json_to_fbd_area(
+    json_data: list[dict[str, int]],
+) -> list[list[int, int, int, int, int]]:
+    """Convert a formated fbd_area for json back to a list of list of int
+
+    Args:
+        json_data (list[dict[str, int]]): the json formated content that is read by the program
+    """
+
+    fbd_area = [[*dict.values(), -1] for dict in json_data]
+
+    return fbd_area
 
 
 def update_trajectory(image_point, point_idx: int, values_index: int, new_values):

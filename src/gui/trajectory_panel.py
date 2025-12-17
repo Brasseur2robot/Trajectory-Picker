@@ -114,17 +114,6 @@ def toggle_trajectory_panel(self, event=None) -> None:
             command=self.delete_point,
         ).pack()
 
-        # self.trajectory_panel_text_widget = tk.Text(
-        #     self.trajectory_panel_content,
-        #     bg="#262626",
-        #     fg="#ffffff",
-        #     bd=0,
-        #     highlightthickness=0,
-        #     height=13,
-        #     width=40,
-        # )
-        # self.trajectory_panel_text_widget.pack(padx=10, pady=10)
-
         # Enable dragging the panel
         # TODO: Need to be tested on Windows to see if it's working without
         """
@@ -162,7 +151,7 @@ def update_trajectory_panel_content(
         _add_point_frame(self)
 
     # Clear the var to not delete non existent index based on the checkbox widgets values (see delete_point in main_panel.py)
-    self.checkbox_del_widgets.clear()
+    self.trajectory_checkbox_del_widgets.clear()
 
     # Update the point_frames content
     for i in range(len(self.image_points)):
@@ -228,7 +217,7 @@ def _create_trajectory_panel_content(self) -> None:
     """
 
     # Clear precedent content
-    self.checkbox_del_widgets.clear()
+    self.trajectory_checkbox_del_widgets.clear()
     self.trajectory_point_frames = []
 
     # Init the point_frames layout
@@ -262,7 +251,7 @@ def _update_point_frame(self, idx: int) -> None:
         point_frame,
         variable=check_var,
     )
-    self.checkbox_del_widgets.insert(idx, check_var)
+    self.trajectory_checkbox_del_widgets.insert(idx, check_var)
     checkbox.grid(row=0, column=0, padx=(10, 0))
 
     #
@@ -407,7 +396,7 @@ def _update_point_frame(self, idx: int) -> None:
     #
     # Action
     #
-    if self.action.get():
+    if self.config_action.get():
         options_number += 1
 
         #

@@ -17,7 +17,7 @@ def create_default_shortcuts(self):
     #
     # Select a point / left click
     #
-    self.select_point_bind = self.master.bind("<Button-1>", self.select_point)
+    self.bind_select_point()
 
     #
     # Delete last point / mousewheel click
@@ -58,7 +58,7 @@ def create_default_shortcuts(self):
     #
     # Create a point / control + p
     #
-    self.master.bind("<Control-p>", self.create_preview)
+    self.create_preview_bind = self.master.bind("<Control-p>", self.create_preview)
 
     #
     # Zoom-in / control + +
@@ -100,16 +100,16 @@ def create_default_shortcuts(self):
     self.menu_bar.bind_all("<Control-o>", self.load_image)
 
     #
-    # Open trajectory file / control + t
+    # Open trajectory file / control + j
     #
-    self.menu_bar.bind_all("<Control-t>", self.load_file)
+    self.menu_bar.bind_all("<Control-j>", self.load_file)
 
     #
     # Save current trajectory to a file / control + s
     #
     self.menu_bar.bind_all(
         "<Control-s>",
-        lambda event=None, data_type="trajectory": self.save_file(event, data_type),
+        lambda event, data_type="trajectory": self.save_file(data_type),
     )
 
     #
@@ -120,9 +120,101 @@ def create_default_shortcuts(self):
     #
     # Close or open the actions_panel / control + a
     #
-    self.menu_bar.bind_all("<Control-a>", self.toggle_actions_panel)
+    self.menu_bar.bind_all("<Control-a>", lambda event: self.toggle_action_panel())
 
     #
-    # Close or open the actions_panel / control + a
+    # Close or open the trajectory_panel / control + e
     #
     self.menu_bar.bind_all("<Control-e>", self.toggle_trajectory_panel)
+
+
+def bind_select_point(self) -> None:
+    """Create the bind to select a point
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.select_point_bind = self.master.bind("<Button-1>", self.select_point)
+
+
+def unbind_select_point(self) -> None:
+    """Unbind the previous created bind to select a point
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.master.unbind("<Button-1>", self.select_point_bind)
+
+
+def binds_preview(self) -> None:
+    """Create the binds for the preview point
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.preview_motion_bind = self.canvas.bind("<Motion>", self.move_preview)
+    self.preview_button_bind = self.canvas.bind("<Button-1>", self.create_point)
+    self.preview_escape_bind = self.master.bind("<Escape>", self.leave_preview)
+
+
+def unbinds_preview(self) -> None:
+    """Unbind the previous created bind for the preview point
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.canvas.unbind("<Motion>", self.preview_motion_bind)
+    self.canvas.unbind("<Button-1>", self.preview_button_bind)
+    self.master.unbind("<Escape>", self.preview_escape_bind)
+
+
+def bind_forbiden_area_mode(self) -> None:
+    """Create the bind to swap to the fbd_area_mode
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.fbd_area_mode_bind = self.menu_bar.bind_all(
+        "<Control-f>", self.toggle_fbd_area_mode
+    )
+
+
+def unbind_forbiden_area_mode(self) -> None:
+    """Undind the previous created bind to swap to the fbd_area_mode
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.menu_bar.unbind("<Button-f>", self.fbd_area_mode_bind)
+
+
+def binds_forbiden_area(self) -> None:
+    """Create the binds to draw a forbiden area
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.fbd_area_start_bind = self.canvas.bind("<Button-1>", self.fbd_area_start)
+    self.fbd_area_update_bind = self.canvas.bind("<B1-Motion>", self.fbd_area_update)
+    self.fbd_area_end_bind = self.canvas.bind("<ButtonRelease-1>", self.fbd_area_end)
+    self.fbd_area_escape_bind = self.master.bind("<Escape>", self.fbd_area_escape)
+
+
+def unbinds_forbiden_area(self) -> None:
+    """Unbind the previous created bind for the drawing of a forbiden area
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+    """
+
+    self.canvas.unbind("<Button-1>", self.fbd_area_start_bind)
+    self.canvas.unbind("<B1-Motion>", self.fbd_area_update_bind)
+    self.canvas.unbind("<ButtonRelease-1>", self.fbd_area_end_bind)
+    self.canvas.unbind("<Escape>", self.fbd_area_escape_bind)

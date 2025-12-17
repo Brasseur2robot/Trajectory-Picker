@@ -11,7 +11,7 @@ def create_canvas(self):
 
     self.canvas = tk.Canvas(self.master)
     self.canvas.pack(expand=True, fill=tk.BOTH)
-    self.canvas.bind("<Configure>", self.load_last_opened_image)
+    self.canvas.bind("<Configure>", lambda event: self.load_last_opened_content())
 
     # Canvas / Menu separator
     separator_cm = ttk.Frame(self.canvas, style="primary.TFrame", height="2")

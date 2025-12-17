@@ -28,21 +28,17 @@ def create_menu_bar(self):
         label="Open image", command=self.load_image, accelerator="Ctrl + O"
     )
 
-    # Open trajectory
+    # Open json file
     self.file_menu.add_command(
-        label="Open trajectory",
-        command=lambda content_type="trajectory": self.load_file(
-            content_type=content_type
-        ),
-        accelerator="Ctrl + T",
+        label="Open json",
+        command=self.load_file,
+        accelerator="Ctrl + J",
     )
 
     # Save trajectory
     self.file_menu.add_command(
         label="Save trajectory",
-        command=lambda event=None, data_type="trajectory": self.save_file(
-            event, data_type
-        ),
+        command=lambda data_type="trajectory": self.save_file(data_type),
         accelerator="Ctrl + S",
     )
 
@@ -147,26 +143,6 @@ def create_menu_bar(self):
         command=lambda option_name="angle",
         option_tk_var=self.angle: self.wrapper_options(option_name, option_tk_var),
     )
-    # Old config:
-    # self.angle_sub_menu = tk.Menu(
-    #     self.trajectory_menu,
-    # )
-    # self.trajectory_menu.add_cascade(label="Angle", menu=self.angle_sub_menu)
-    #
-    # # Use angle or not
-    # self.angle_sub_menu.add_radiobutton(
-    #     label="False",
-    #     variable=self.angle,
-    #     value="false",
-    #     command=lambda: self.wrapper_angle(),
-    # )
-    #
-    # self.angle_sub_menu.add_radiobutton(
-    #     label="True",
-    #     variable=self.angle,
-    #     value="true",
-    #     command=lambda: self.wrapper_angle(),
-    # )
 
     #
     # Orientation checkbutton
@@ -200,35 +176,65 @@ def create_menu_bar(self):
     self.action_sub_menu = tk.Menu(
         self.trajectory_menu,
     )
-    self.trajectory_menu.add_cascade(label="Actions", menu=self.action_sub_menu)
+    self.trajectory_menu.add_cascade(label="Action", menu=self.action_sub_menu)
 
-    # Actions checkbutton
+    # Action checkbutton
     self.action_sub_menu.add_checkbutton(
-        label="Actions",
-        variable=self.action,
+        label="Action",
+        variable=self.config_action,
         onvalue=1,
         offvalue=0,
         command=lambda option_name="action",
-        option_tk_var=self.action: self.wrapper_options(option_name, option_tk_var),
+        option_tk_var=self.config_action: self.wrapper_options(
+            option_name, option_tk_var
+        ),
     )
 
-    if self.action.get():
+    if self.config_action.get():
+        self.toggle_action_shortcut(True)
         self.toggle_wea_checkbutton(True)
         self.toggle_export_action_checkbutton(True)
 
-        if self.export_action.get():
+        if self.config_export_action.get():
             self.toggle_export_action_command(True)
+
+    #
+    # Fbd_area checkbutton sub-menu
+    #
+    self.fbd_area_sub_menu = tk.Menu(
+        self.trajectory_menu,
+    )
+    self.trajectory_menu.add_cascade(label="Forbiden area", menu=self.fbd_area_sub_menu)
+
+    # Fbd_area checkbutton
+    self.fbd_area_sub_menu.add_checkbutton(
+        label="Forbiden area",
+        variable=self.config_fbd_area,
+        onvalue=1,
+        offvalue=0,
+        command=lambda option_name="fbd_area",
+        option_tk_var=self.config_fbd_area: self.wrapper_options(
+            option_name, option_tk_var
+        ),
+    )
+
+    if self.config_fbd_area.get():
+        self.toggle_fbd_area_shortcut(True)
+        self.toggle_export_fbd_area_checkbutton(True)
+
+        if self.config_export_fbd_area.get():
+            self.toggle_export_fbd_area_command(True)
 
     #
     # Other commands
     #
 
-    # Edit the actions
-    self.trajectory_menu.add_command(
-        label="Edit actions",
-        command=self.toggle_actions_panel,
-        accelerator="Control + A",
-    )
+    # # Edit the actions
+    # self.trajectory_menu.add_command(
+    #     label="Edit actions",
+    #     command=self.toggle_actions_panel,
+    #     accelerator="Control + A",
+    # )
 
     # Edit the trajectory
     self.trajectory_menu.add_command(
@@ -267,6 +273,25 @@ def create_menu_bar(self):
     self.master.config(menu=self.menu_bar)
 
 
+def toggle_action_shortcut(self, toggle_int: int) -> None:
+    """Create/bind the fbd_area_shortcut or delete/unbind it, this shortcut can toggle the fbd_area_mode to edit forbiden area
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if the shortcut should be displayed or not
+    """
+
+    if toggle_int:
+        self.action_sub_menu.add_command(
+            label="Edit actions",
+            command=lambda event: self.toggle_action_panel(),
+            accelerator="Control + A",
+        )
+
+    else:
+        self.action_sub_menu.delete(1)
+
+
 def toggle_wea_checkbutton(self, toggle_int: int) -> None:
     """Create the wea_checkbutton or delete it
 
@@ -300,11 +325,11 @@ def toggle_export_action_checkbutton(self, toggle_int: int) -> None:
     if toggle_int:
         self.action_sub_menu.add_checkbutton(
             label="Export action in json",
-            variable=self.export_action,
+            variable=self.config_export_action,
             onvalue=1,
             offvalue=0,
             command=lambda option_name="export_action",
-            option_tk_var=self.export_action: self.wrapper_options(
+            option_tk_var=self.config_export_action: self.wrapper_options(
                 option_name, option_tk_var
             ),
         )
@@ -314,7 +339,7 @@ def toggle_export_action_checkbutton(self, toggle_int: int) -> None:
 
 
 def toggle_export_action_command(self, toggle_int: int) -> None:
-    """Create the two commands for export_action_command or delete it
+    """Create the save actions command or delete it
 
     Args:
         self (GUI): the GUI object that is manipulated
@@ -324,19 +349,87 @@ def toggle_export_action_command(self, toggle_int: int) -> None:
     if toggle_int:
         self.file_menu.insert_command(
             3,
-            label="Open actions",
-            command=lambda content_type="actions": self.load_file(
-                content_type=content_type
-            ),
-        )
-        self.file_menu.insert_command(
-            4,
             label="Save actions",
-            command=lambda event=None, data_type="actions": self.save_file(
-                event, data_type
+            command=lambda data_type="action": self.save_file(data_type),
+        )
+
+    else:
+        _remove_file_menu_command(self, "Save actions")
+
+
+def toggle_fbd_area_shortcut(self, toggle_int: int) -> None:
+    """Create/bind the fbd_area_shortcut or delete/unbind it, this shortcut can toggle the fbd_area_mode to edit forbiden area
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if the shortcut should be displayed or not
+    """
+
+    if toggle_int:
+        self.fbd_area_sub_menu.add_command(
+            label="Edit forbiden area",
+            command=self.toggle_fbd_area_mode,
+            accelerator="Control + F",
+        )
+        self.bind_forbiden_area_mode()
+
+    else:
+        self.fbd_area_sub_menu.delete(1)
+        self.unbind_forbiden_area_mode()
+
+
+def toggle_export_fbd_area_checkbutton(self, toggle_int: int) -> None:
+    """Create the export_fbd_area_checkbutton or delete it
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if the checkbutton should be displayed or not
+    """
+
+    if toggle_int:
+        self.fbd_area_sub_menu.add_checkbutton(
+            label="Export forbiden area in json",
+            variable=self.config_export_fbd_area,
+            onvalue=1,
+            offvalue=0,
+            command=lambda option_name="export_fbd_area",
+            option_tk_var=self.config_export_fbd_area: self.wrapper_options(
+                option_name, option_tk_var
             ),
         )
 
     else:
-        self.file_menu.delete(4)
-        self.file_menu.delete(3)
+        self.fbd_area_sub_menu.delete(1)
+
+
+def toggle_export_fbd_area_command(self, toggle_int: int) -> None:
+    """Create the save forbiden area command or delete it
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        toggle_int (int): value to know if action command should be displayed or not
+    """
+
+    if toggle_int:
+        self.file_menu.insert_command(
+            3,
+            label="Save forbiden area",
+            command=lambda data_type="fbd_area": self.save_file(data_type),
+        )
+
+    else:
+        _remove_file_menu_command(self, "Save forbiden area")
+
+
+def _remove_file_menu_command(self, label: str) -> None:
+    """Remove a command from the file_menu based on its label
+
+    Args:
+        self (GUI): the GUI object that is manipulated
+        label (str): the label that represent the command tha will be deleted
+    """
+
+    for i in range(self.file_menu.index("end") + 1):
+        if self.file_menu.entrycget(i, "label") == label:
+            self.file_menu.delete(i)
+            break

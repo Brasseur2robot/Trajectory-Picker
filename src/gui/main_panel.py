@@ -1,7 +1,14 @@
 # Based on this project: https://github.com/ImagingSolution/PythonImageViewer/
 
 import tkinter as tk  # Window creation
-from tkinter import image_names, ttk, StringVar, filedialog, messagebox  # Open file
+from tkinter import (
+    Widget,
+    image_names,
+    ttk,
+    StringVar,
+    filedialog,
+    messagebox,
+)  # Open file
 from PIL import Image, ImageTk  # Image management
 import math  # Revolution calculations
 import numpy as np  # Affine transformation matrix operations
@@ -10,31 +17,60 @@ import json  # Json operations
 
 import trajectory_manager
 
-from .actions_panel import toggle_actions_panel
+from .action_panel import toggle_action_panel
 from .canvas import create_canvas
 from .info_bar import create_info_bar
 from .menu_bar import (
     create_menu_bar,
+    toggle_action_shortcut,
     toggle_wea_checkbutton,
     toggle_export_action_checkbutton,
     toggle_export_action_command,
+    toggle_fbd_area_shortcut,
+    toggle_export_fbd_area_checkbutton,
+    toggle_export_fbd_area_command,
 )
-from .shortcuts import create_default_shortcuts
+from .shortcuts import (
+    create_default_shortcuts,
+    bind_select_point,
+    unbind_select_point,
+    binds_preview,
+    unbinds_preview,
+    bind_forbiden_area_mode,
+    unbind_forbiden_area_mode,
+    binds_forbiden_area,
+    unbinds_forbiden_area,
+)
 from .trajectory_panel import toggle_trajectory_panel, update_trajectory_panel_content
+from .fbd_area_panel import toggle_fbd_area_panel, update_fbd_area_panel_content
 
 
 class GUI(tk.Frame):
     # Import methods from other files (easier to maintain)
-    toggle_actions_panel = toggle_actions_panel
+    toggle_action_panel = toggle_action_panel
     create_canvas = create_canvas
     create_info_bar = create_info_bar
     create_menu_bar = create_menu_bar
+    toggle_action_shortcut = toggle_action_shortcut
     toggle_wea_checkbutton = toggle_wea_checkbutton
     toggle_export_action_checkbutton = toggle_export_action_checkbutton
     toggle_export_action_command = toggle_export_action_command
+    toggle_fbd_area_shortcut = toggle_fbd_area_shortcut
+    toggle_export_fbd_area_checkbutton = toggle_export_fbd_area_checkbutton
+    toggle_export_fbd_area_command = toggle_export_fbd_area_command
     create_default_shortcuts = create_default_shortcuts
+    bind_select_point = bind_select_point
+    unbind_select_point = unbind_select_point
+    binds_preview = binds_preview
+    unbinds_preview = unbinds_preview
+    bind_forbiden_area_mode = bind_forbiden_area_mode
+    unbind_forbiden_area_mode = unbind_forbiden_area_mode
+    binds_forbiden_area = binds_forbiden_area
+    unbinds_forbiden_area = unbinds_forbiden_area
     toggle_trajectory_panel = toggle_trajectory_panel
     update_trajectory_panel_content = update_trajectory_panel_content
+    toggle_fbd_area_panel = toggle_fbd_area_panel
+    update_fbd_area_panel_content = update_fbd_area_panel_content
 
     def __init__(
         self,
@@ -79,19 +115,26 @@ class GUI(tk.Frame):
             None  # Canvas point used for the “transparent” preview
         )
 
-        # Actions panel variable to know if toggle_actions_panel have to display the panel or close it
+        # Actions panel variable to know if toggle_action_panel have to display the panel or close it
         # self.actions is the list of possible actions for a point
-        self.actions_panel = None
+        self.action_panel = None
         self.actions = []
 
         # Trajectory panel variable to know if toggle_trajectory_panel have to display the panel or close it
         self.trajectory_panel = None
 
+        # Forbiden area panel variable to know if toggle_fbd_area_mode have to switch to fbd area mode or stop it
+        self.fbd_area_panel = None
+        self.fbd_area = []
+
         # Variable to toggle symmetry
         self.symmetry = False
 
         # Variable to get which point to delete
-        self.checkbox_del_widgets = []
+        self.trajectory_checkbox_del_widgets = []
+
+        # Variable to get which fbd_area to delete
+        self.fbd_area_checkbox_del_widgets = []
 
         # Wait for the basic generation of the GUI before loading other widgets
         self.master.update()
@@ -101,6 +144,15 @@ class GUI(tk.Frame):
         self.create_info_bar()
         self.create_canvas()
         self.create_default_shortcuts()
+
+        # Load the trajectory_panel after getting last trajectory
+
+        # old config:
+        # self.load_last_opened_image()
+        # Render the last opened image
+        # self.master.after(
+        #     110, self.load_last_opened_image
+        # )  # TODO: Wait 60ms to make sure everything is loaded, if done too fast it won't show the image // Bug
 
     # Close the window
     def menu_quit_clicked(self, event=None):
@@ -131,12 +183,11 @@ class GUI(tk.Frame):
     # Save & load file / Config wrapper
     # -------------------------------------------------------------------------------
 
-    def save_file(self, event=None, data_type: str | None = None) -> None:
+    def save_file(self, data_type: str | None = None) -> None:
         """Open a file picker to save the trajectory or actions to a file depending of the data_type value
 
         Args:
             self (GUI): the GUI object that is mainuplated
-            event (tkinter.Event): set to None here because not used
             data_type (str | None): define which data is manipulated and how to save it
         """
 
@@ -151,6 +202,10 @@ class GUI(tk.Frame):
             messagebox.showwarning("No data", "There are no actions to save.")
             return
 
+        elif data_type == "fbd_area" and not self.fbd_area:
+            messagebox.showwarning("No data", "There are no forbiden area to save.")
+            return
+
         file_path = filedialog.asksaveasfilename(
             title=f"Save {type} file",
             defaultextension=".json",
@@ -159,45 +214,47 @@ class GUI(tk.Frame):
 
         if file_path:
             file_extension = os.path.splitext(file_path)[-1].lower()
+
             try:
                 if file_extension == ".json":
                     if data_type == "trajectory":
-                        json_trajectory = trajectory_manager.coordinates_to_json(
+                        json_data = trajectory_manager.coordinates_to_json(
                             self.image_points,
                             self.actions,
+                            self.fbd_area,
                             self.angle.get(),
                             self.orientation.get(),
                             self.direction.get(),
-                            self.action.get(),
+                            self.config_action.get(),
+                            self.config_export_action.get(),
                             self.wea.get(),
+                            self.config_fbd_area.get(),
+                            self.config_export_fbd_area.get(),
                         )
-                        self.save_json_file(file_path, json_trajectory)
+                        self.save_json_file(file_path, json_data)
                         self.save_config("last_opened_trajectory", file_path)
 
-                    elif data_type == "actions":
-                        json_actions = trajectory_manager.format_actions_to_json(
-                            self.actions
+                    elif data_type == "action":
+                        json_data = trajectory_manager.format_actions_to_json(
+                            self.actions, True
                         )
-                        self.save_json_file(file_path, json_actions)
-                        self.save_config("last_opened_actions", file_path)
+                        self.save_json_file(file_path, json_data)
+                        self.save_config("last_opened_action", file_path)
 
-                # elif file_extension == ".csv":
-                #     trajectory_manager.coordinates_to_csv(
-                #         self.image_points,
-                #         file_path,
-                #         self.angle.get(),
-                #         self.orientation.get(),
-                #         self.direction.get(),
-                #         self.action.get(),
-                #     )
+                    elif data_type == "fbd_area":
+                        json_data = trajectory_manager.format_fbd_area_to_json(
+                            self.fbd_area, True
+                        )
+                        self.save_json_file(file_path, json_data)
+                        self.save_config("last_opened_fbd_area", file_path)
+
                 else:
                     messagebox.showerror("Unsupported File", "File type not supported.")
+
             except Exception as e:
                 messagebox.showerror("Error", f"Error saving file: {e}")
 
-    def load_file(
-        self, event=None, file_path: str | None = None, content_type: str = ""
-    ):
+    def load_file(self, event=None, file_path: str | None = None):
         """Load the trajectory or the actions file chosen by the user depending of the content_type
 
         Args:
@@ -217,9 +274,7 @@ class GUI(tk.Frame):
         if file_path is None:
             file_path = filedialog.askopenfilename(
                 filetypes=[
-                    # ("JSON & CSV", ".json .csv"),
                     ("JSON", ".json"),
-                    # ("CSV", ".csv"),
                 ],
                 initialdir=os.getcwd(),  # Current directory
             )
@@ -231,9 +286,12 @@ class GUI(tk.Frame):
                 if file_extension == ".json":
                     json_data = self.load_json_file(file_path)
 
-                    # Actions type file
-                    if content_type == "actions":
-                        response = "yes"
+                    response = "yes"
+
+                    content_type = json_data["metadata"]["content_type"]
+
+                    # actions type file
+                    if content_type == "action":
                         if len(self.actions) != 0:
                             response = messagebox.askquestion(
                                 "Actions",
@@ -242,69 +300,135 @@ class GUI(tk.Frame):
 
                         if response == "yes":
                             self.actions = trajectory_manager.format_json_to_actions(
-                                json_data
+                                json_data["data"]
                             )
-                            self.save_config("last_opened_actions", file_path)
+                            self.save_config("last_opened_action", file_path)
 
-                    # Trajectory type file (could also have the actions inside the same file)
+                    # fbd_area type file
+                    elif content_type == "fbd_area":
+                        if len(self.fbd_area) != 0:
+                            response = messagebox.askquestion(
+                                "Forbiden area",
+                                "You have already some forbiden area that are defined, would you like to overwrite them ?",
+                            )
+
+                        if response == "yes":
+                            self.fbd_area = trajectory_manager.format_json_to_fbd_area(
+                                json_data["data"]
+                            )
+                            self.save_config("last_opened_fbd_area", file_path)
+                            self.fbd_area_redraw()
+
+                    # trajectory type file
                     elif content_type == "trajectory":
-                        # Actions & trajectory in the same file
-                        if isinstance(json_data[1], list):
-                            response = "yes"
-
-                            if len(self.actions) != 0 or len(self.image_points) != 0:
-                                response = messagebox.askquestion(
-                                    "Trajectory & actions",
-                                    "You have already some actions or trajectory that are defined, would you like to overwrite them ?",
-                                )
-
-                            if response == "yes":
-                                self.actions = (
-                                    trajectory_manager.format_json_to_actions(
-                                        json_data[0]
-                                    )
-                                )
-
-                                self.image_points = self.reload_config(
-                                    trajectory_manager.format_json_to_trajectory(
-                                        json_data[1]
-                                    )
-                                )
-
-                                self.save_config("last_opened_trajectory", file_path)
-
-                        # Only the trajectory inside the file
-                        elif isinstance(json_data[0], dict):
-                            response = "yes"
-
-                            if len(self.image_points) != 0:
-                                response = messagebox.askquestion(
-                                    "Trajectory",
-                                    "You have already some trajectory that is defined, would you like to overwrite it ?",
-                                )
-
-                            if response == "yes":
-                                self.image_points = self.reload_config(
-                                    trajectory_manager.format_json_to_trajectory(
-                                        json_data
-                                    )
-                                )
-                                self.save_config("last_opened_trajectory", file_path)
-
-                        else:
-                            messagebox.showerror(
-                                "Importing error",
-                                "An error has occured during the importation of the file",
+                        if len(self.image_points) != 0:
+                            response = messagebox.askquestion(
+                                "Trajectory",
+                                "You have already a trajectory that is defined, would you like to overwrite it ?",
                             )
-                            return
+
+                        if response == "yes":
+                            self.image_points = (
+                                trajectory_manager.format_json_to_trajectory(
+                                    json_data["data"]
+                                )
+                            )
+                            self.save_config("last_opened_trajectory", file_path)
+
+                    # trajectory_actions type file
+                    elif content_type == "trajectory_action":
+                        if len(self.image_points) != 0:
+                            response = messagebox.askquestion(
+                                "Trajectory",
+                                "You have already a trajectory that is defined, would you like to overwrite it ?",
+                            )
+
+                        if len(self.actions) != 0:
+                            response = messagebox.askquestion(
+                                "Actions",
+                                "You have already some actions that are defined, would you like to overwrite them ?",
+                            )
+
+                        if response == "yes":
+                            self.actions = trajectory_manager.format_json_to_actions(
+                                json_data["data"][0]
+                            )
+                            self.image_points = (
+                                trajectory_manager.format_json_to_trajectory(
+                                    json_data["data"][1]
+                                )
+                            )
+                            self.save_config("last_opened_trajectory", file_path)
+
+                    # trajectory_fbd_area type file
+                    elif content_type == "trajectory_fbd_area":
+                        if len(self.image_points) != 0:
+                            response = messagebox.askquestion(
+                                "Trajectory",
+                                "You have already a trajectory that is defined, would you like to overwrite it ?",
+                            )
+
+                        if len(self.fbd_area) != 0:
+                            response = messagebox.askquestion(
+                                "Forbiden area",
+                                "You have already some forbiden area that are defined, would you like to overwrite them ?",
+                            )
+
+                        if response == "yes":
+                            self.fbd_area = trajectory_manager.format_json_to_fbd_area(
+                                json_data["data"][0]
+                            )
+                            self.image_points = (
+                                trajectory_manager.format_json_to_trajectory(
+                                    json_data["data"][1]
+                                )
+                            )
+                            self.save_config("last_opened_trajectory", file_path)
+
+                    # trajectory_actions_fbd_area type file
+                    elif content_type == "trajectory_action_fbd_area":
+                        if len(self.image_points) != 0:
+                            response = messagebox.askquestion(
+                                "Trajectory",
+                                "You have already a trajectory that is defined, would you like to overwrite it ?",
+                            )
+
+                        if len(self.fbd_area) != 0:
+                            response = messagebox.askquestion(
+                                "Forbiden area",
+                                "You have already some forbiden area that are defined, would you like to overwrite them ?",
+                            )
+
+                        if len(self.actions) != 0:
+                            response = messagebox.askquestion(
+                                "Actions",
+                                "You have already some actions that are defined, would you like to overwrite them ?",
+                            )
+
+                        if response == "yes":
+                            self.actions = trajectory_manager.format_json_to_actions(
+                                json_data["data"][0]
+                            )
+                            self.fbd_area = trajectory_manager.format_json_to_fbd_area(
+                                json_data["data"][1]
+                            )
+                            self.image_points = (
+                                trajectory_manager.format_json_to_trajectory(
+                                    json_data["data"][2]
+                                )
+                            )
+                            self.save_config("last_opened_trajectory", file_path)
+
+                    else:
+                        messagebox.showerror(
+                            "Importing error",
+                            "An error has occured during the importation of the file",
+                        )
+                        return
 
                     self.redraw_image()
                     if self.trajectory_panel is not None:
                         self.update_trajectory_panel_content()
-
-                # elif file_extension == ".csv":
-                #     self.image_points = trajectory_manager.csv_to_coordinates(file_path)
-                #     self.redraw_image()
 
                 else:
                     messagebox.showerror("Unsupported File", "File type not supported.")
@@ -312,70 +436,26 @@ class GUI(tk.Frame):
             except Exception as e:
                 messagebox.showerror("Error", f"Error loading file: {e}")
 
-    def reload_config(self, trajectory):
-        def _reload_menu(menu, menu_index: int):
-            # Tricks to reload the checkmark on the menu_index options of the menu
-            # Unset the command to not execute it, change the checkmark and reset the command
-
-            cmd = menu.entrycget(menu_index, "command")
-            menu.entryconfig(menu_index, command="")
-            menu.invoke(menu_index)
-            menu.entryconfig(menu_index, command=cmd)
-
-        # Can't pass inside the condition for wea and action two times, or it will break the menu
-        action_flag = False
-
-        for point in trajectory:
-            if point[2] is not None and not self.angle.get():
-                self.save_config("angle", 1)
-                _reload_menu(self.trajectory_menu, 2)
-
-            # TODO: check index for last point, don't have to check
-            elif point[2] is None and self.angle.get():
-                trajectory = trajectory_manager.calculate_angle(trajectory)
-
-            if point[3] is not None and not self.orientation.get():
-                self.save_config("orientation", 1)
-                _reload_menu(self.trajectory_menu, 3)
-
-            if point[4] is not None and not self.direction.get():
-                self.save_config("direction", 1)
-                _reload_menu(self.trajectory_menu, 4)
-
-            # if point[6] and not self.wea.get() and not action_flag:
-            #     action_flag = True
-            #     print("wea")
-            #     self.save_config("action", 1)
-            #     self.save_config("wea", 1)
-            #     _reload_menu(self.action_sub_menu, 0)
-            #     _reload_menu(self.action_sub_menu, 1)
-            #     self.toggle_wea_checkbutton(True)
-            #     self.toggle_export_action_checkbutton(True)
-            #
-            # elif self.actions and not self.action.get() and not action_flag:
-            #     action_flag = True
-            #     print("action")
-            #     self.save_config("action", 1)
-            #     _reload_menu(self.action_sub_menu, 0)
-            #     self.toggle_wea_checkbutton(True)
-            #     self.toggle_export_action_checkbutton(True)
-
-        return trajectory
-
     def save_config(self, key, value):
         # Save the config inside .json file based on a key / value system
 
-        json_config = self.load_json_file(self.CONFIG_FILE)
+        if os.path.exists(self.CONFIG_FILE):
+            with open(self.CONFIG_FILE, "r") as config_file:
+                try:
+                    config = json.load(config_file)
+                except json.JSONDecodeError:
+                    return None
 
-        if json_config is not None:
             # Update with new key / value pair
-            json_config[key] = value
+            config[key] = value
 
-            self.save_json_file(self.CONFIG_FILE, json_config)
+            with open(self.CONFIG_FILE, "w") as config_file:
+                json.dump(config, config_file, indent=4)
 
         else:
-            json_config = {key: value}
-            self.save_json_file(self.CONFIG_FILE, json_config)
+            with open(self.CONFIG_FILE, "w") as config_file:
+                config = {key: value}
+                json.dump(config, config_file, indent=4)
 
     def assign_config(self) -> None:
         """Set all the differents object vars to the value that are saved in the config
@@ -392,35 +472,43 @@ class GUI(tk.Frame):
         self.angle = tk.IntVar(value=self.CONFIG.get("angle", 0))
         self.orientation = tk.IntVar(value=self.CONFIG.get("orientation", 0))
         self.direction = tk.IntVar(value=self.CONFIG.get("direction", 0))
-        self.action = tk.IntVar(value=self.CONFIG.get("action", 0))
+        self.config_action = tk.IntVar(value=self.CONFIG.get("action", 0))
         self.wea = tk.IntVar(value=self.CONFIG.get("wea", 0))
-        self.export_action = tk.IntVar(value=self.CONFIG.get("export_action", 0))
+        self.config_export_action = tk.IntVar(value=self.CONFIG.get("export_action", 0))
+        self.config_fbd_area = tk.IntVar(value=self.CONFIG.get("fbd_area", 0))
+        self.config_export_fbd_area = tk.IntVar(
+            value=self.CONFIG.get("export_fbd_area", 0)
+        )
 
         return None
 
-    def load_last_opened_image(self, event=None):
-        # Load the last opened image based on the content of the config file
+    def load_last_opened_content(self):
+        # Load the last opened content based on the content of the config file
         last_image = self.CONFIG.get("last_opened_image")
         if last_image and os.path.exists(last_image):
             self.set_image(last_image)
 
             # Render the last opened / saved trajectory
             if self.CONFIG.get("last_opened_trajectory"):
-                self.load_file(
-                    file_path=self.CONFIG.get("last_opened_trajectory"),
-                    content_type="trajectory",
-                )
+                self.load_file(file_path=self.CONFIG.get("last_opened_trajectory"))
 
             # Load the last opened / saved actions
             if (
                 not self.actions
-                and self.CONFIG.get("last_opened_actions")
-                and self.action.get()
+                and self.CONFIG.get("last_opened_action")
+                and self.config_action.get()
+                and self.config_export_action.get()
             ):
-                self.load_file(
-                    file_path=self.CONFIG.get("last_opened_actions"),
-                    content_type="actions",
-                )
+                self.load_file(file_path=self.CONFIG.get("last_opened_action"))
+
+            # Load the last opened / saved fbd_area
+            if (
+                not self.fbd_area
+                and self.CONFIG.get("last_opened_fbd_area")
+                and self.config_fbd_area.get()
+                and self.config_export_fbd_area.get()
+            ):
+                self.load_file(file_path=self.CONFIG.get("last_opened_fbd_area"))
 
         self.toggle_trajectory_panel()
 
@@ -443,6 +531,11 @@ class GUI(tk.Frame):
 
         if file_path:
             self.save_config("last_opened_image", file_path)
+
+        if self.trajectory_panel is not None:
+            self.traa = None
+
+        self.toggle_trajectory_panel()
 
     def save_json_file(self, file_path, content):
         with open(file_path, mode="w") as file:
@@ -487,27 +580,22 @@ class GUI(tk.Frame):
             elif self.previous_cs != self.coordinate_system.get():
                 self.coordinate_system.set(self.previous_cs)
 
-        # Calculate the angles values if it was not done before
-        elif option_name == "angle":
-            if self.image_points and self.image_points[0][2] is None:
-                self.image_points = trajectory_manager.calculate_angle(
-                    self.image_points
-                )
-
         # Rendering the wea_checkbutton & the toggle_export_action_checkbutton only if the action option is used
         elif option_name == "action":
             if option_tk_var.get():
+                self.toggle_action_shortcut(True)
                 self.toggle_wea_checkbutton(True)
                 self.toggle_export_action_checkbutton(True)
 
-                if self.export_action.get():
+                if self.config_export_action.get():
                     self.toggle_export_action_command(True)
 
             else:
+                self.toggle_action_shortcut(False)
                 self.toggle_wea_checkbutton(False)
                 self.toggle_export_action_checkbutton(False)
 
-                if self.export_action.get():
+                if self.config_export_action.get():
                     self.toggle_export_action_command(False)
 
         # Render the export_action commands inside the file_menu
@@ -516,6 +604,36 @@ class GUI(tk.Frame):
                 self.toggle_export_action_command(True)
             else:
                 self.toggle_export_action_command(False)
+
+        # Render the fbd_area_shortcut, the export_fbd_area_checkbutton & the export_fbd_area_command only if the fbd_area option is used
+        elif option_name == "fbd_area":
+            if option_tk_var.get():
+                self.toggle_fbd_area_shortcut(True)
+                self.toggle_export_fbd_area_checkbutton(True)
+
+                if self.config_export_fbd_area.get():
+                    self.toggle_export_fbd_area_command(True)
+
+            else:
+                self.toggle_fbd_area_shortcut(False)
+                self.toggle_export_fbd_area_checkbutton(False)
+
+                if self.config_export_fbd_area.get():
+                    self.toggle_export_fbd_area_command(False)
+
+                # If the user is in fbd_area_mode and click on the fbd_area_checkbutton to remove the option, the program leave the fbd_area_mode
+                if (
+                    self.fbd_area_panel is not None
+                    and self.fbd_area_panel.winfo_exists()
+                ):
+                    self.toggle_fbd_area_panel()
+
+        # Render the export_fbd_area commands inside the file_menu
+        elif option_name == "export_fbd_area":
+            if option_tk_var.get():
+                self.toggle_export_fbd_area_command(True)
+            else:
+                self.toggle_export_fbd_area_command(False)
 
         # Basic treatment for all options
         if response == "yes":
@@ -535,7 +653,7 @@ class GUI(tk.Frame):
         if event is None and self.image_points is not None:
             points_to_pop = [
                 i
-                for i, checkbox_value in enumerate(self.checkbox_del_widgets)
+                for i, checkbox_value in enumerate(self.trajectory_checkbox_del_widgets)
                 if checkbox_value.get() == 1
             ]
             points_to_pop.reverse()  # Reverse it to not delete the wrong ones
@@ -568,7 +686,7 @@ class GUI(tk.Frame):
         if self.image_points is not None:
             for idx, point in enumerate(self.image_points):
                 x, y = point[0], point[1]
-                image_point = self.to_image_point(event.x, event.y)
+                image_point = self.to_image_point(event.x, event.y, False)
                 if image_point is not None:
                     x_clicked, y_cliked = image_point[0], image_point[1]
                 else:
@@ -596,9 +714,7 @@ class GUI(tk.Frame):
 
         self.preview_mode = True
 
-        self.preview_motion_bind = self.canvas.bind("<Motion>", self.move_preview)
-        self.preview_button_bind = self.canvas.bind("<Button-1>", self.create_point)
-        self.preview_escape_bind = self.master.bind("<Escape>", self.leave_preview)
+        self.binds_preview()
 
         self.move_preview(event)
 
@@ -607,7 +723,7 @@ class GUI(tk.Frame):
         if not self.preview_mode:
             return
 
-        preview_point_coords = self.to_image_point(event.x, event.y)
+        preview_point_coords = self.to_image_point(event.x, event.y, False)
         if preview_point_coords is not None:
             self.preview_point_coords = [
                 [
@@ -630,13 +746,11 @@ class GUI(tk.Frame):
         self.image_points = trajectory_manager.calculate_angle(self.image_points)
         self.preview_mode = False
         self.preview_point_coords = None
-        self.master.unbind("<Button-1>", self.select_point_bind)
+        self.unbind_select_point()
         self.update_trajectory_panel_content()
         self.redraw_image()
-        self.canvas.unbind("<Motion>", self.preview_motion_bind)
-        self.canvas.unbind("<Button-1>", self.preview_button_bind)
-        self.master.unbind("<Escape>", self.preview_escape_bind)
-        self.select_point_bind = self.master.bind("<Button-1>", self.select_point)
+        self.unbinds_preview()
+        self.bind_select_point()
 
         return
 
@@ -645,11 +759,114 @@ class GUI(tk.Frame):
         self.preview_point_coords = None
         self.update_trajectory_panel_content()
         self.redraw_image()
-        self.canvas.unbind("<Motion>", self.preview_motion_bind)
-        self.canvas.unbind("<Button-1>", self.preview_button_bind)
-        self.canvas.unbind("<Escape>", self.preview_escape_bind)
+        self.unbinds_preview()
 
         return
+
+    def toggle_fbd_area_mode(self, event=None):
+        if self.preview_mode:
+            return
+
+        if self.fbd_area_panel is None or not self.fbd_area_panel.winfo_exists():
+            self.unbind_select_point()
+            self.master.config(cursor="plus")
+            self.binds_forbiden_area()
+            self.fbd_area_redraw()
+
+        self.toggle_fbd_area_panel()
+
+    def fbd_area_start(self, event):
+        self.fbd_area_start_x = event.x
+        self.fbd_area_start_y = event.y
+        self.fbd_area_draw = self.canvas.create_rectangle(
+            self.fbd_area_start_x,
+            self.fbd_area_start_y,
+            self.fbd_area_start_x,
+            self.fbd_area_start_y,
+            outline="blue",
+            width=2,
+            fill="#0000FF",
+            stipple="gray25",
+        )
+
+    def fbd_area_update(self, event):
+        if self.fbd_area_draw:
+            self.canvas.coords(
+                self.fbd_area_draw,
+                self.fbd_area_start_x,
+                self.fbd_area_start_y,
+                event.x,
+                event.y,
+            )
+
+    def fbd_area_end(self, event):
+        if self.fbd_area_draw:
+            self.canvas.coords(
+                self.fbd_area_draw,
+                self.fbd_area_start_x,
+                self.fbd_area_start_y,
+                event.x,
+                event.y,
+            )
+
+            start_point = self.to_image_point(
+                self.fbd_area_start_x, self.fbd_area_start_y, True
+            )
+            end_point = self.to_image_point(event.x, event.y, True)
+
+            if start_point is None or end_point is None:
+                return
+
+            self.fbd_area.append(
+                [
+                    start_point[0],
+                    start_point[1],
+                    end_point[0],
+                    end_point[1],
+                    self.fbd_area_draw,
+                ]
+            )
+            self.update_fbd_area_panel_content()
+
+    def fbd_area_escape(self, event=None):
+        self.unbinds_forbiden_area()
+        self.bind_select_point()
+        self.master.config(cursor="")
+        self.redraw_image()
+
+    def fbd_area_redraw(self):
+        for fbd_area in self.fbd_area:
+            start_point = self.to_canvas_point(fbd_area[0], fbd_area[1], True)
+            end_point = self.to_canvas_point(fbd_area[2], fbd_area[3], True)
+            fbd_area_draw = self.canvas.create_rectangle(
+                start_point[0],
+                start_point[1],
+                end_point[0],
+                end_point[1],
+                outline="blue",
+                width=2,
+                fill="#0000FF",
+                stipple="gray25",
+            )
+
+            # Reset the rectangle index over the canvas to the new one (needed to update the rectangle with the fbd_area_panel)
+            fbd_area[4] = fbd_area_draw
+
+    def fbd_area_delete(self):
+        if self.fbd_area is not None:
+            fbd_area_to_pop = [
+                i
+                for i, checkbox_value in enumerate(self.fbd_area_checkbox_del_widgets)
+                if checkbox_value.get() == 1
+            ]
+            fbd_area_to_pop.reverse()  # Reverse it to not delete the wrong ones
+            for index in fbd_area_to_pop:
+                self.canvas.delete(self.fbd_area[index][2])
+                self.fbd_area.pop(index)
+
+            self.update_fbd_area_panel_content(
+                fbd_area_to_pop
+            )  # Update the content of the floating panel
 
     def move_image(self, event):
         # Drag the mouse with right mouse button pressed / move the image
@@ -664,7 +881,7 @@ class GUI(tk.Frame):
         if self.pil_image is None:
             return
 
-        image_point = self.to_image_point(event.x, event.y)
+        image_point = self.to_image_point(event.x, event.y, False)
         if image_point is not None:
             self.label_image_pixel["text"] = (
                 f"({image_point[0]:.0f}, {image_point[1]:.0f})"
@@ -837,7 +1054,7 @@ class GUI(tk.Frame):
     # Convert point coordinates
     # -------------------------------------------------------------------------------
 
-    def to_image_point(self, x, y):
+    def to_image_point(self, x, y, int_output: bool):
         # Apply the inverse matrix to change from canvas coordinates to image coordinates
         if self.pil_image is None:
             return []
@@ -867,9 +1084,17 @@ class GUI(tk.Frame):
             or image_point[1] > self.pil_image.height
         ):
             return None
+
+        if int_output:
+            image_point = [int(round(image_point[0])), int(round(image_point[1]))]
+            return image_point
+
+        # The third value is not useful
+        image_point = [image_point[0], image_point[1]]
+
         return image_point
 
-    def to_canvas_point(self, image_x, image_y):
+    def to_canvas_point(self, image_x, image_y, int_output: bool | None = None):
         # Apply the affine matrix to change from image coordinates to canvas coordinates
         if self.pil_image is None:
             return None
@@ -887,6 +1112,9 @@ class GUI(tk.Frame):
             self.mat_affine_copy[1][1] = -self.mat_affine_copy[1][1]  # Flipping axis
 
         canvas_coords = np.dot(self.mat_affine_copy, (image_x, image_y, 1.0))
+
+        if int_output:
+            return int(round(canvas_coords[0])), int(round(canvas_coords[1]))
 
         return canvas_coords[0], canvas_coords[1]
 
@@ -999,9 +1227,13 @@ class GUI(tk.Frame):
                 self.canvas.create_text(
                     x, y, text=str(index + 1), fill="black", font=("Helvetica", 9)
                 )
+                # TODO: self.points.append(point)
 
     def redraw_image(self):
         # Redraw the image
         if self.pil_image is None:
             return
         self.draw_image(self.pil_image)
+        if self.fbd_area_panel is not None:
+            if self.fbd_area_panel.winfo_exists():
+                self.fbd_area_redraw()
