@@ -58,20 +58,12 @@ def toggle_fbd_area_panel(self, event=None) -> None:
         )
 
         # Function and binding to use the mousewheel for scrolling
-        self.fbd_area_panel.bind(
-            "<Button-4>",
-            lambda event: self.fbd_area_form_canvas.yview_scroll(-1, "units"),
-        )
-        self.fbd_area_panel.bind(
-            "<Button-5>",
-            lambda event: self.fbd_area_form_canvas.yview_scroll(1, "units"),
-        )
+        def _on_mousewheel(event):
+            self.trajectory_form_canvas.yview_scroll(
+                -1 if event.delta > 0 else 1, "units"
+            )
 
-        # Need to be tested for windows
-        # def _on_mousewheel(event):
-        #     canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        #
-        # canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        self.trajectory_form_canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
         # Content inside the canvas where the labels and entries will be displayed
         self.fbd_area_form_frame = ttk.Frame(self.fbd_area_form_canvas)
@@ -79,16 +71,9 @@ def toggle_fbd_area_panel(self, event=None) -> None:
             (0, 0), window=self.fbd_area_form_frame, anchor="nw"
         )
 
-        # Frame without scroll for the close button
+        # Frame without scroll for the delete fbd_area button
         button_frame = ttk.Frame(content_frame)
         button_frame.grid(row=1, column=0, pady=10)
-
-        # Close button
-        # ttk.Button(
-        #     button_frame,
-        #     text="Close panel",
-        #     command=lambda self=self: _close_panel(self),
-        # ).pack()
 
         # Delete fbd_area button
         ttk.Button(
