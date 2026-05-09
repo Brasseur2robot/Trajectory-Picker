@@ -18,30 +18,12 @@ def toggle_action_panel(self) -> None:
         self.action_panel = tk.Toplevel(self.master)
 
         self.action_panel.title("Actions panel")
-        self.action_panel.overrideredirect(True)
         self.action_panel.geometry(f"{MIN_WIDTH}x{MIN_HEIGHT}")
         self.action_panel.minsize(height=MIN_HEIGHT, width=MIN_WIDTH)
 
         # Main frame (everything is inside it)
         main_frame = ttk.Frame(self.action_panel)
         main_frame.pack(fill=tk.X)
-
-        # Titlebar
-        titlebar_frame = ttk.Frame(main_frame)
-        titlebar_frame.pack(fill=tk.X)
-
-        titlebar_frame.pack_propagate(False)  # Disable resizing based on child widgets
-        titlebar_frame.config(height=20)
-
-        titlebar_label = ttk.Label(
-            titlebar_frame,
-            text="Actions Panel",
-        )
-        titlebar_label.pack(side=tk.LEFT, padx=5)
-
-        # Titlebar / content separator
-        separator_frame = ttk.Frame(main_frame, style="primary.TFrame", height=2)
-        separator_frame.pack(fill=tk.X)
 
         # Content inside the panel
         content_frame = ttk.Frame(main_frame)

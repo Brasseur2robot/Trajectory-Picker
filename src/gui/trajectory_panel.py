@@ -1,6 +1,6 @@
-import enum
 import tkinter as tk
-from tkinter import image_names, ttk, messagebox
+from tkinter import messagebox, ttk
+
 import numpy as np
 
 from trajectory_manager import update_trajectory
@@ -23,32 +23,12 @@ def toggle_trajectory_panel(self, event=None) -> None:
         self.trajectory_panel = tk.Toplevel(self.master)
 
         self.trajectory_panel.title("Trajectory panel")
-        self.trajectory_panel.overrideredirect(True)
         self.trajectory_panel.geometry(f"{MIN_WIDTH}x{MIN_HEIGHT}")
         self.trajectory_panel.minsize(height=MIN_HEIGHT, width=MIN_WIDTH)
 
         # Main frame (everything is inside it)
         main_frame = ttk.Frame(self.trajectory_panel)
         main_frame.pack(fill=tk.X)
-
-        # Title bar
-        titlebar_frame = ttk.Frame(main_frame)
-        titlebar_frame.pack(fill=tk.X)
-
-        titlebar_frame.pack_propagate(False)  # Disable resizing based on child widgets
-        titlebar_frame.config(
-            height=20
-        )  # Set the height of the titlebar, can't do it if pack is not desactivate
-
-        titlebar_label = ttk.Label(
-            titlebar_frame,
-            text="Floating Panel",
-        )
-        titlebar_label.pack(side=tk.LEFT, padx=5)
-
-        # Titlebar / content separator
-        separator_frame = ttk.Frame(main_frame, style="primary.TFrame", height="2")
-        separator_frame.pack(fill="x")
 
         # Content inside the panel
         content_frame = ttk.Frame(main_frame)
@@ -488,7 +468,7 @@ def _coordinate_entry_change(
 
     try:
         new_coordinate[1] = np.float64(new_coordinate[1])
-    except Exception as e:
+    except Exception:
         messagebox.showerror("Error", "New coordinate must be number")
         _update_point_frame(self, idx)
         return
@@ -529,7 +509,7 @@ def _orientation_entry_change(self, new_orientation: str, idx: int) -> None:
 
     try:
         new_orientation = float(new_orientation)
-    except Exception as e:
+    except Exception:
         messagebox.showerror("Error", "Orientation must be number")
         _update_point_frame(self, idx)
         return

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
 
 MIN_HEIGHT = 300
 MIN_WIDTH = 300
@@ -19,30 +19,12 @@ def toggle_fbd_area_panel(self, event=None) -> None:
         self.fbd_area_panel = tk.Toplevel(self.master)
 
         self.fbd_area_panel.title("Forbiden area panel")
-        self.fbd_area_panel.overrideredirect(True)
         self.fbd_area_panel.geometry(f"{MIN_WIDTH}x{MIN_HEIGHT}")
         self.fbd_area_panel.minsize(height=MIN_HEIGHT, width=MIN_WIDTH)
 
         # Main frame (everything is inside it)
         main_frame = ttk.Frame(self.fbd_area_panel)
         main_frame.pack(fill=tk.X)
-
-        # Titlebar
-        titlebar_frame = ttk.Frame(main_frame)
-        titlebar_frame.pack(fill=tk.X)
-
-        titlebar_frame.pack_propagate(False)  # Disable resizing based on child widgets
-        titlebar_frame.config(height=20)
-
-        titlebar_label = ttk.Label(
-            titlebar_frame,
-            text="Forbiden Area Panel",
-        )
-        titlebar_label.pack(side=tk.LEFT, padx=5)
-
-        # Titlebar / content separator
-        separator_frame = ttk.Frame(main_frame, style="primary.TFrame", height=2)
-        separator_frame.pack(fill=tk.X)
 
         # Content inside the panel
         content_frame = ttk.Frame(main_frame)
@@ -365,7 +347,7 @@ def _coordinate_entry_change(
     try:
         new_value = int(new_value)
 
-    except Exception as e:
+    except Exception:
         messagebox.showerror("Error", "New coordinate must be number")
         _update_fbd_area_frame(self, idx)
         return
